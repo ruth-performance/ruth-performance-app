@@ -101,7 +101,7 @@ export function BasicGymnasticsCard({
               )}
 
               {/* Special input for no-slider movements (like rope climbs, HS hold) */}
-              {movement.noSlider && movement.maxValue && (
+              {movement.noSlider && (
                 <div className="mt-4">
                   <div className="text-[10px] text-gray-500 mb-1 uppercase">
                     Max {movement.unit || 'reps'}
@@ -110,7 +110,7 @@ export function BasicGymnasticsCard({
                     type="number"
                     value={data.maxUB || ''}
                     onChange={(e) => handleChange('maxUB', parseInt(e.target.value) || 0)}
-                    placeholder={`0-${movement.maxValue}`}
+                    placeholder={movement.maxValue ? `0-${movement.maxValue}` : 'Enter max'}
                     className="w-full px-3 py-2 bg-black/30 border border-white/10 rounded-lg text-white text-sm outline-none focus:border-cyan-500/50"
                   />
                 </div>

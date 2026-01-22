@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { getCurrentUser } from '@/lib/auth';
-import { getAthlete } from '@/lib/sheets';
+import { getAthlete, getSheetData } from '@/lib/sheets';
 import Navbar from '@/components/Navbar';
 import ModuleCard from '@/components/ModuleCard';
 import { 
@@ -21,6 +21,23 @@ export default async function DashboardPage() {
   }
 
   const athlete = await getAthlete(user.email);
+  
+  // Check which assessments are completed
+  const [movementData, strengthData, conditioningData, fitnessData, goalsData] = await Promise.all([
+    getSheetData('movement', user.email).catch(() => null),
+    getSheetData('strength', user.email).catch(() => null),
+    getSheetData('conditioning', user.email).catch(() => null),
+    getSheetData('fitness', user.email).catch(() => null),
+    getSheetData('goals', user.email).catch(() => null),
+  ]);
+  
+  const movementComplete = !!movementData?.completedAt;
+  const strengthComplete = !!strengthData?.completedAt;
+  const conditioningComplete = !!conditioningData?.completedAt;
+  const fitnessComplete = !!fitnessData?.completedAt;
+  const goalsComplete = !!goalsData?.completedAt;
+  
+  const completedCount = [movementComplete, strengthComplete, conditioningComplete, fitnessComplete, goalsComplete].filter(Boolean).length;
 
   const modules = [
     {
@@ -29,7 +46,7 @@ export default async function DashboardPage() {
       href: '/movement',
       icon: Move,
       accentColor: 'from-violet-500 to-purple-500',
-      status: 'not_started' as const,
+      status: movementComplete ? 'completed' as const : 'not_started' as const,
     },
     {
       title: 'Assess My Strength',
@@ -37,7 +54,7 @@ export default async function DashboardPage() {
       href: '/strength',
       icon: Dumbbell,
       accentColor: 'from-orange-500 to-red-500',
-      status: 'not_started' as const,
+      status: strengthComplete ? 'completed' as const : 'not_started' as const,
     },
     {
       title: 'Assess My Conditioning',
@@ -45,7 +62,7 @@ export default async function DashboardPage() {
       href: '/conditioning',
       icon: Zap,
       accentColor: 'from-cyan-500 to-emerald-500',
-      status: 'not_started' as const,
+      status: conditioningComplete ? 'completed' as const : 'not_started' as const,
     },
     {
       title: 'Test My Fitness',
@@ -53,7 +70,7 @@ export default async function DashboardPage() {
       href: '/fitness',
       icon: Trophy,
       accentColor: 'from-blue-500 to-indigo-500',
-      status: 'not_started' as const,
+      status: fitnessComplete ? 'completed' as const : 'not_started' as const,
     },
     {
       title: 'Set My Goals',
@@ -61,7 +78,7 @@ export default async function DashboardPage() {
       href: '/goals',
       icon: Target,
       accentColor: 'from-pink-500 to-rose-500',
-      status: 'not_started' as const,
+      status: goalsComplete ? 'completed' as const : 'not_started' as const,
     },
   ];
 
@@ -103,7 +120,7 @@ export default async function DashboardPage() {
               </div>
               <div>
                 <p className="text-gray-400 text-xs">Assessments</p>
-                <p className="text-white font-semibold">0 / 5</p>
+                <p className="text-white font-semibold">{completedCount} / 5</p>
               </div>
             </div>
           </div>

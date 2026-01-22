@@ -46,7 +46,7 @@ export function analyzeMovementData(
 
         if (conf >= 4) {
           strengths.push({ name: m.name, confidence: conf, category: 'Basic CF' });
-        } else if (conf <= 3) {
+        } else if (conf <= 2) {
           const priority = calculatePriorityScore(m.id, conf, competitionTier);
           weaknesses.push({ name: m.name, confidence: conf, category: 'Basic CF', priority });
         }
@@ -72,7 +72,7 @@ export function analyzeMovementData(
 
         if (conf >= 4) {
           strengths.push({ name: m.name, confidence: conf, category: 'Gymnastics' });
-        } else if (conf <= 3) {
+        } else if (conf <= 2) {
           const priority = calculatePriorityScore(m.id, conf, competitionTier);
           weaknesses.push({ name: m.name, confidence: conf, category: 'Gymnastics', priority });
         }
@@ -103,7 +103,7 @@ export function analyzeMovementData(
 
           if (zoneConf >= 4) {
             strengths.push({ name: `${m.name} (${zone})`, confidence: zoneConf, category: 'Dumbbell' });
-          } else if (zoneConf <= 3) {
+          } else if (zoneConf <= 2) {
             const priority = calculatePriorityScore(m.id, zoneConf, competitionTier, zone);
             weaknesses.push({ name: `${m.name} (${zone})`, confidence: zoneConf, category: 'Dumbbell', priority });
           }
@@ -135,7 +135,7 @@ export function analyzeMovementData(
 
           if (zoneConf >= 4) {
             strengths.push({ name: `${m.name} (${zone})`, confidence: zoneConf, category: 'Barbell' });
-          } else if (zoneConf <= 3) {
+          } else if (zoneConf <= 2) {
             const priority = calculatePriorityScore(m.id, zoneConf, competitionTier, zone);
             weaknesses.push({ name: `${m.name} (${zone})`, confidence: zoneConf, category: 'Barbell', priority });
           }
