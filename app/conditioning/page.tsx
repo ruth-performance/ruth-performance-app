@@ -1,9 +1,9 @@
 import { redirect } from 'next/navigation';
 import { getCurrentUser } from '@/lib/auth';
-import { getAthlete } from '@/lib/sheets';
+import { getAthlete, getSheetData } from '@/lib/sheets';
 import Navbar from '@/components/Navbar';
-import Link from 'next/link';
-import { ArrowLeft, Construction } from 'lucide-react';
+import ConditioningAssessment from './ConditioningAssessment';
+import { ConditioningData } from '@/lib/conditioning-data';
 
 export default async function ConditioningPage() {
   const user = await getCurrentUser();
@@ -13,37 +13,37 @@ export default async function ConditioningPage() {
   }
 
   const athlete = await getAthlete(user.email);
+  
+  // Check if athlete has required profile data
+  if (!athlete?.gender || !athlete?.weight) {
+    redirect('/profile?message=Please complete your profile first (gender and weight required)');
+  }
+
+  // Try to load existing conditioning data
+  let existingData: ConditioningData | undefined;
+  try {
+    const savedData = await getSheetData('conditioning', user.email);
+    if (savedData && savedData.conditioningData) {
+      existingData = JSON.parse(savedData.conditioningData);
+    }
+  } catch (err) {
+    // No existing data, that's fine
+  }
 
   return (
     <div className="min-h-screen bg-ruth-dark">
       <Navbar userName={athlete?.name || user.name} />
       
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <Link 
-          href="/dashboard" 
-          className="inline-flex items-center text-gray-400 hover:text-white mb-6 transition-colors"
-        >
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Back to Dashboard
-        </Link>
-
-        <div className="bg-ruth-card border border-ruth-border rounded-2xl p-12 text-center">
-          <div className="w-16 h-16 mx-auto mb-6 rounded-full bg-gradient-ruth flex items-center justify-center">
-            <Construction className="w-8 h-8 text-white" />
-          </div>
-          <h1 className="text-2xl font-bold text-white mb-3">
-            Conditioning Assessment
-          </h1>
-          <p className="text-gray-400 mb-6 max-w-md mx-auto">
-            This module is coming soon. We're integrating the conditioning assessment into the unified platform.
-          </p>
-          <Link
-            href="/dashboard"
-            className="inline-flex items-center px-6 py-3 bg-gradient-ruth text-white font-medium rounded-lg hover:opacity-90 transition-opacity"
-          >
-            Return to Dashboard
-          </Link>
-        </div>
+      <main className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <ConditioningAssessment 
+          athlete={{
+            email: user.email,
+            name: athlete?.name || user.name || '',
+            gender: athlete?.gender as 'male' | 'female',
+            weight: athlete?.weight,
+          }}
+          existingData={existingData}
+        />
       </main>
     </div>
   );
