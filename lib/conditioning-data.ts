@@ -28,17 +28,102 @@ export const BENCHMARKS = {
 };
 
 // ============================================================================
+// BMI TARGETS FOR ELITE CROSSFIT ATHLETES
+// ============================================================================
+
+export const BMI_TARGETS = {
+  elite: {
+    male: { min: 28, max: 30 },
+    female: { min: 23.7, max: 24.4 }
+  },
+  masters: {
+    'male_35-39': 29.9,
+    'male_40-44': 27.6,
+    'male_45-49': 27.9,
+    'male_50-54': 29.0,
+    'male_55-59': 26.3,
+    'male_60-64': 26.6,
+    'male_65-70': 25.4,
+    'female_35-39': 24.1,
+    'female_40-44': 23.7,
+    'female_45-49': 25.0,
+    'female_50-54': 23.0,
+    'female_55-59': 22.8,
+    'female_60-64': 22.8,
+    'female_65-70': 22.3,
+  }
+};
+
+// Calculate ideal weight range based on height and gender
+export function calculateIdealWeightRange(
+  heightInches: number, 
+  gender: 'male' | 'female'
+): { min: number; max: number } {
+  const heightMeters = heightInches * 0.0254;
+  const targets = BMI_TARGETS.elite[gender];
+  
+  // BMI = weight(kg) / height(m)^2
+  // weight(kg) = BMI * height(m)^2
+  // weight(lbs) = weight(kg) * 2.20462
+  const minWeightKg = targets.min * (heightMeters * heightMeters);
+  const maxWeightKg = targets.max * (heightMeters * heightMeters);
+  
+  return {
+    min: Math.round(minWeightKg * 2.20462),
+    max: Math.round(maxWeightKg * 2.20462)
+  };
+}
+
+// Determine body composition status relative to ideal
+export type BodyCompStatus = 'under' | 'ideal' | 'over';
+
+export function getBodyCompStatus(
+  weightLbs: number,
+  heightInches: number,
+  gender: 'male' | 'female'
+): BodyCompStatus {
+  const idealRange = calculateIdealWeightRange(heightInches, gender);
+  
+  if (weightLbs < idealRange.min) return 'under';
+  if (weightLbs > idealRange.max) return 'over';
+  return 'ideal';
+}
+
+// ============================================================================
 // UTILITY FUNCTIONS
 // ============================================================================
 
 export const parseTime = (timeStr: string | undefined): number | null => {
   if (!timeStr || timeStr === '') return null;
   const cleaned = timeStr.trim();
-  const parts = cleaned.split(':').map(p => parseFloat(p));
-  if (parts.length === 2) return parts[0] * 60 + parts[1];
-  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
-  if (parts.length === 1 && !isNaN(parts[0])) return parts[0];
-  return null;
+  
+  // If contains colon, parse as MM:SS or HH:MM:SS
+  if (cleaned.includes(':')) {
+    const parts = cleaned.split(':').map(p => parseFloat(p));
+    if (parts.length === 2) return parts[0] * 60 + parts[1];
+    if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    return null;
+  }
+  
+  // No colon - smart parse based on value
+  const num = parseFloat(cleaned);
+  if (isNaN(num)) return null;
+  
+  // If it looks like MMSS format (e.g., 130 = 1:30, 645 = 6:45)
+  // Values 100+ are likely MMSS format
+  if (num >= 100) {
+    const mins = Math.floor(num / 100);
+    const secs = num % 100;
+    // Validate seconds are 0-59
+    if (secs < 60) {
+      return mins * 60 + secs;
+    }
+  }
+  
+  // Small numbers (under 100) are ambiguous
+  // For short efforts (400m, 500m), treat as seconds
+  // This handles "56" as 56 seconds
+  return num;
 };
 
 export const formatTime = (seconds: number | null): string => {
@@ -52,6 +137,20 @@ export const paceToWatts = (secPer500m: number | null): number | null => {
   if (!secPer500m || secPer500m <= 0) return null;
   const secPerMeter = secPer500m / 500;
   return 2.80 / Math.pow(secPerMeter, 3);
+};
+
+// Convert watts to cal/hr (Concept2 formula)
+export const wattsToCalHr = (watts: number | null): number | null => {
+  if (!watts || watts <= 0) return null;
+  // Concept2 uses: cal/hr = (watts * 4) + 300 (approximate)
+  // More accurate: cal/hr = watts * 0.8604 + 300
+  return Math.round((watts * 4) + 300);
+};
+
+// Convert pace/500m to cal/hr directly
+export const paceToCalHr = (secPer500m: number | null): number | null => {
+  const watts = paceToWatts(secPer500m);
+  return wattsToCalHr(watts);
 };
 
 export const calculateCP = (
@@ -75,6 +174,7 @@ export interface Zone {
   description: string;
   color: string;
   paceRange?: string;
+  calHrRange?: string;
   paceRangeMile?: string;
   paceRangeKm?: string;
 }
@@ -118,6 +218,8 @@ export interface EchoAnalysis {
   ratioPct: number | null;
   assessment: string;
   priority: boolean;
+  bodyCompStatus?: BodyCompStatus;
+  idealWeightRange?: { min: number; max: number };
 }
 
 export interface RowAnalysis {
@@ -149,9 +251,19 @@ export interface ConditioningAnalysis {
 export function analyzeConditioning(
   data: ConditioningData,
   gender: 'male' | 'female',
-  weightLbs: number | null
+  weightLbs: number | null,
+  heightInches: number | null
 ): ConditioningAnalysis {
   const bm = BENCHMARKS[gender] || BENCHMARKS.male;
+
+  // ========== BODY COMPOSITION STATUS ==========
+  let bodyCompStatus: BodyCompStatus | undefined;
+  let idealWeightRange: { min: number; max: number } | undefined;
+  
+  if (weightLbs && heightInches) {
+    bodyCompStatus = getBodyCompStatus(weightLbs, heightInches, gender);
+    idealWeightRange = calculateIdealWeightRange(heightInches, gender);
+  }
 
   // ========== ECHO ANALYSIS ==========
   const echoCals = data.echo10min ? parseFloat(data.echo10min) : null;
@@ -165,24 +277,47 @@ export function analyzeConditioning(
   let echoPriority = false;
   
   if (echoPowerRating !== null && echoRatioPct !== null) {
+    // Elite output - never a priority regardless of body comp
     if (echoPowerRating >= 110) {
-      echoAssessment = 'Elite output — echo is not a priority';
+      echoAssessment = 'Elite output — echo bike is not a priority';
       echoPriority = false;
-    } else if (echoPowerRating >= 90 && echoRatioPct >= 85) {
-      echoAssessment = 'Strong performer with good efficiency';
-      echoPriority = false;
-    } else if (echoPowerRating >= 90 && echoRatioPct < 85) {
-      echoAssessment = 'Good output — body composition could unlock more';
-      echoPriority = false;
-    } else if (echoPowerRating >= 70 && echoRatioPct >= 85) {
-      echoAssessment = 'Good efficiency — focus on building raw power';
-      echoPriority = true;
-    } else if (echoPowerRating >= 70 && echoRatioPct < 85) {
-      echoAssessment = 'Opportunity in both power and body composition';
-      echoPriority = true;
-    } else {
-      echoAssessment = 'Priority area for development';
-      echoPriority = true;
+    } 
+    // Good output (90-110%)
+    else if (echoPowerRating >= 90) {
+      if (bodyCompStatus === 'ideal' || bodyCompStatus === 'under') {
+        echoAssessment = 'Strong performer — continue developing raw power capacity';
+        echoPriority = false;
+      } else if (bodyCompStatus === 'over') {
+        echoAssessment = 'Good output — body composition improvements could enhance power:weight ratio';
+        echoPriority = false;
+      } else {
+        // No height data, can't determine body comp
+        echoAssessment = 'Strong performer with good output';
+        echoPriority = false;
+      }
+    }
+    // Developing output (70-90%)
+    else if (echoPowerRating >= 70) {
+      if (bodyCompStatus === 'ideal' || bodyCompStatus === 'under') {
+        echoAssessment = 'Priority: build raw power capacity through dedicated bike training';
+        echoPriority = true;
+      } else if (bodyCompStatus === 'over') {
+        echoAssessment = 'Dual opportunity: develop power capacity and optimize body composition';
+        echoPriority = true;
+      } else {
+        echoAssessment = 'Good efficiency — focus on building raw power';
+        echoPriority = true;
+      }
+    }
+    // Low output (<70%)
+    else {
+      if (bodyCompStatus === 'over') {
+        echoAssessment = 'Priority area: focus on both power development and body composition';
+        echoPriority = true;
+      } else {
+        echoAssessment = 'Priority area: dedicated focus on building aerobic power capacity';
+        echoPriority = true;
+      }
     }
   }
 
@@ -219,13 +354,13 @@ export function analyzeConditioning(
     const p5k = rowPaces[5000];
 
     rowZones = [
-      { zone: 7, name: 'Anaerobic Power', description: 'Neuromuscular power, maximal speed', color: ZONE_COLORS.z7, paceRange: `≤ ${formatTime(p500 + 3)}` },
-      { zone: 6, name: 'Anaerobic Capacity', description: 'Lactate buffering, speed preservation', color: ZONE_COLORS.z6, paceRange: `${formatTime(p500 + 3)} - ${formatTime(p2k)}` },
-      { zone: 5, name: 'VO2max', description: 'Max aerobic power', color: ZONE_COLORS.z5, paceRange: `${formatTime(p2k)} - ${formatTime(p2k + 3)}` },
-      { zone: 4, name: 'Threshold', description: 'Develop lactate threshold', color: ZONE_COLORS.z4, paceRange: `${formatTime(p2k + 3)} - ${formatTime(p5k + 5)}` },
-      { zone: 3, name: 'Tempo', description: 'Sustainable aerobic training', color: ZONE_COLORS.z3, paceRange: `${formatTime(p5k + 5)} - ${formatTime(p5k + 15)}` },
-      { zone: 2, name: 'Base', description: 'Aerobic base, capillary density', color: ZONE_COLORS.z2, paceRange: `${formatTime(p5k + 15)} - ${formatTime(p5k + 30)}` },
-      { zone: 1, name: 'Recovery', description: 'Promote circulation, recovery', color: ZONE_COLORS.z1, paceRange: `> ${formatTime(p5k + 30)}` }
+      { zone: 7, name: 'Anaerobic Power', description: 'Neuromuscular power, maximal speed', color: ZONE_COLORS.z7, paceRange: `≤ ${formatTime(p500 + 3)}`, calHrRange: `≥ ${paceToCalHr(p500 + 3)}` },
+      { zone: 6, name: 'Anaerobic Capacity', description: 'Lactate buffering, speed preservation', color: ZONE_COLORS.z6, paceRange: `${formatTime(p500 + 3)} - ${formatTime(p2k)}`, calHrRange: `${paceToCalHr(p2k)} - ${paceToCalHr(p500 + 3)}` },
+      { zone: 5, name: 'VO2max', description: 'Max aerobic power', color: ZONE_COLORS.z5, paceRange: `${formatTime(p2k)} - ${formatTime(p2k + 3)}`, calHrRange: `${paceToCalHr(p2k + 3)} - ${paceToCalHr(p2k)}` },
+      { zone: 4, name: 'Threshold', description: 'Develop lactate threshold', color: ZONE_COLORS.z4, paceRange: `${formatTime(p2k + 3)} - ${formatTime(p5k + 5)}`, calHrRange: `${paceToCalHr(p5k + 5)} - ${paceToCalHr(p2k + 3)}` },
+      { zone: 3, name: 'Tempo', description: 'Sustainable aerobic training', color: ZONE_COLORS.z3, paceRange: `${formatTime(p5k + 5)} - ${formatTime(p5k + 15)}`, calHrRange: `${paceToCalHr(p5k + 15)} - ${paceToCalHr(p5k + 5)}` },
+      { zone: 2, name: 'Base', description: 'Aerobic base, capillary density', color: ZONE_COLORS.z2, paceRange: `${formatTime(p5k + 15)} - ${formatTime(p5k + 30)}`, calHrRange: `${paceToCalHr(p5k + 30)} - ${paceToCalHr(p5k + 15)}` },
+      { zone: 1, name: 'Recovery', description: 'Promote circulation, recovery', color: ZONE_COLORS.z1, paceRange: `> ${formatTime(p5k + 30)}`, calHrRange: `< ${paceToCalHr(p5k + 30)}` }
     ];
   }
 
@@ -283,7 +418,9 @@ export function analyzeConditioning(
       powerPctOfElite: echoPowerPctOfElite,
       ratioPct: echoRatioPct,
       assessment: echoAssessment,
-      priority: echoPriority
+      priority: echoPriority,
+      bodyCompStatus,
+      idealWeightRange
     },
     row: {
       times: rowTimes,

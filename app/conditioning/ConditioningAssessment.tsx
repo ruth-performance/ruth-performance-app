@@ -24,6 +24,7 @@ interface AthleteProfile {
   name: string;
   gender: 'male' | 'female';
   weight?: number;
+  height?: number;
 }
 
 interface ConditioningAssessmentProps {
@@ -36,6 +37,7 @@ type View = 'input' | 'results';
 export default function ConditioningAssessment({ athlete, existingData }: ConditioningAssessmentProps) {
   const [view, setView] = useState<View>('input');
   const [runPaceUnit, setRunPaceUnit] = useState<'mile' | 'km'>('mile');
+  const [rowDisplayUnit, setRowDisplayUnit] = useState<'pace' | 'calhr'>('pace');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
 
@@ -74,8 +76,8 @@ export default function ConditioningAssessment({ athlete, existingData }: Condit
 
   // Calculate analysis
   const analysis = useMemo(() => {
-    return analyzeConditioning(data, athlete.gender, athlete.weight || null);
-  }, [data, athlete.gender, athlete.weight]);
+    return analyzeConditioning(data, athlete.gender, athlete.weight || null, athlete.height || null);
+  }, [data, athlete.gender, athlete.weight, athlete.height]);
 
   const hasEchoData = !!data.echo10min;
   const hasRowData = !!(data.row500 || data.row2000 || data.row5000);
@@ -358,12 +360,27 @@ export default function ConditioningAssessment({ athlete, existingData }: Condit
 
           {/* Row Training Zones */}
           {analysis.row.zones.length > 0 && (
-            <ZoneTable
-              zones={analysis.row.zones}
-              title="Row Training Zones (per 500m)"
-              paceLabel="PACE /500m"
-              color="#4ecdc4"
-            />
+            <div>
+              <div className="flex justify-end mb-2">
+                <ToggleButtons
+                  options={[
+                    { value: 'pace', label: 'PACE /500m' },
+                    { value: 'calhr', label: 'CAL/HR' },
+                  ]}
+                  value={rowDisplayUnit}
+                  onChange={(v) => setRowDisplayUnit(v as 'pace' | 'calhr')}
+                  color="#4ecdc4"
+                />
+              </div>
+              <ZoneTable
+                zones={analysis.row.zones}
+                title="Row Training Zones"
+                paceLabel={rowDisplayUnit === 'calhr' ? 'CAL/HR' : 'PACE /500m'}
+                color="#4ecdc4"
+                isRow={true}
+                rowDisplayUnit={rowDisplayUnit}
+              />
+            </div>
           )}
 
           {/* Run Training Zones */}

@@ -41,6 +41,7 @@ export default async function ConditioningPage() {
             name: athlete?.name || user.name || '',
             gender: athlete?.gender as 'male' | 'female',
             weight: athlete?.weight,
+            height: athlete?.height,
           }}
           existingData={existingData}
         />

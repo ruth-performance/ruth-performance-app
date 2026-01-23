@@ -104,9 +104,11 @@ interface ZoneTableProps {
   color: string;
   isRun?: boolean;
   paceUnit?: 'mile' | 'km';
+  isRow?: boolean;
+  rowDisplayUnit?: 'pace' | 'calhr';
 }
 
-export function ZoneTable({ zones, title, paceLabel, color, isRun = false, paceUnit = 'mile' }: ZoneTableProps) {
+export function ZoneTable({ zones, title, paceLabel, color, isRun = false, paceUnit = 'mile', isRow = false, rowDisplayUnit = 'pace' }: ZoneTableProps) {
   if (zones.length === 0) return null;
   
   return (
@@ -145,7 +147,9 @@ export function ZoneTable({ zones, title, paceLabel, color, isRun = false, paceU
                 >
                   {isRun 
                     ? (paceUnit === 'mile' ? z.paceRangeMile : z.paceRangeKm) 
-                    : z.paceRange
+                    : isRow
+                      ? (rowDisplayUnit === 'calhr' ? z.calHrRange : z.paceRange)
+                      : z.paceRange
                   }
                 </td>
                 <td className="py-2.5 px-2 text-gray-500 hidden sm:table-cell">{z.description}</td>
