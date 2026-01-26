@@ -1,4 +1,4 @@
-import { supabase } from '../supabase';
+import { getSupabase } from '../supabase';
 
 export interface MovementPriority {
   rank: number;
@@ -48,6 +48,8 @@ export interface MovementAssessment {
 }
 
 export async function saveMovementAssessment(data: MovementAssessmentData): Promise<MovementAssessment> {
+  const supabase = getSupabase();
+
   // 1. Insert the movement assessment
   const { data: assessment, error: assessmentError } = await supabase
     .from('movement_assessments')
@@ -95,6 +97,7 @@ export async function saveMovementAssessment(data: MovementAssessmentData): Prom
 }
 
 export async function getLatestMovementAssessment(profileId: string): Promise<MovementAssessment | null> {
+  const supabase = getSupabase();
   const { data, error } = await supabase
     .from('movement_assessments')
     .select('*')
@@ -108,6 +111,7 @@ export async function getLatestMovementAssessment(profileId: string): Promise<Mo
 }
 
 export async function getMovementPriorities(assessmentId: string) {
+  const supabase = getSupabase();
   const { data, error } = await supabase
     .from('movement_priorities')
     .select('*')

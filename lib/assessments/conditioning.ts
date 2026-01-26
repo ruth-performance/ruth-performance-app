@@ -1,4 +1,4 @@
-import { supabase } from '../supabase';
+import { getSupabase } from '../supabase';
 
 export interface TrainingZone {
   zone: number;
@@ -72,6 +72,7 @@ export interface ConditioningAssessment {
 }
 
 export async function saveConditioningAssessment(data: ConditioningAssessmentData): Promise<ConditioningAssessment> {
+  const supabase = getSupabase();
   const { data: assessment, error } = await supabase
     .from('conditioning_assessments')
     .insert({
@@ -106,6 +107,7 @@ export async function saveConditioningAssessment(data: ConditioningAssessmentDat
 }
 
 export async function getLatestConditioningAssessment(profileId: string): Promise<ConditioningAssessment | null> {
+  const supabase = getSupabase();
   const { data, error } = await supabase
     .from('conditioning_assessments')
     .select('*')

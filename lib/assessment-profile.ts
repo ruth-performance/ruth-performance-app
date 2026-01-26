@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { getSupabase } from './supabase';
 
 export interface ProfileData {
   email: string;
@@ -23,6 +23,7 @@ export interface AssessmentProfile {
 }
 
 export async function upsertAssessmentProfile(data: ProfileData): Promise<AssessmentProfile> {
+  const supabase = getSupabase();
   const { data: profile, error } = await supabase
     .from('assessment_profiles')
     .upsert(
@@ -48,6 +49,7 @@ export async function upsertAssessmentProfile(data: ProfileData): Promise<Assess
 }
 
 export async function getProfileByEmail(email: string): Promise<AssessmentProfile | null> {
+  const supabase = getSupabase();
   const { data, error } = await supabase
     .from('assessment_profiles')
     .select('*')
@@ -59,6 +61,7 @@ export async function getProfileByEmail(email: string): Promise<AssessmentProfil
 }
 
 export async function tryAutoLinkToCoachCommand(profileId: string, email: string): Promise<string | null> {
+  const supabase = getSupabase();
   // Check if Coach Command has an athlete with this email
   const { data: athlete } = await supabase
     .from('athletes')

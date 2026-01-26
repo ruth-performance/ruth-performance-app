@@ -1,4 +1,4 @@
-import { supabase } from '../supabase';
+import { getSupabase } from '../supabase';
 
 export interface StrengthAssessmentData {
   profileId: string;
@@ -61,6 +61,7 @@ export interface StrengthAssessment {
 }
 
 export async function saveStrengthAssessment(data: StrengthAssessmentData): Promise<StrengthAssessment> {
+  const supabase = getSupabase();
   const { data: assessment, error } = await supabase
     .from('strength_assessments')
     .insert({
@@ -96,6 +97,7 @@ export async function saveStrengthAssessment(data: StrengthAssessmentData): Prom
 }
 
 export async function getLatestStrengthAssessment(profileId: string): Promise<StrengthAssessment | null> {
+  const supabase = getSupabase();
   const { data, error } = await supabase
     .from('strength_assessments')
     .select('*')
