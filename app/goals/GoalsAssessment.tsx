@@ -55,17 +55,41 @@ const PHASE_INFO = [
 ];
 
 export default function GoalsAssessment({ athlete, existingData }: GoalsAssessmentProps) {
-  const [phase, setPhase] = useState<Phase>(1);
-  const [data, setData] = useState<GoalsData>(existingData || createEmptyGoalsData());
+  // Start at review phase if existing data, otherwise phase 1
+  const [phase, setPhase] = useState<Phase>(existingData ? 7 : 1);
+  const [data, setData] = useState<GoalsData>(() => {
+    // Initialize with existingData if available, otherwise empty
+    if (existingData) {
+      return { ...createEmptyGoalsData(), ...existingData };
+    }
+    return createEmptyGoalsData();
+  });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
 
-  // Auto-save to localStorage
+  // Load existing data when prop changes (handles hydration)
   useEffect(() => {
-    localStorage.setItem('goals-assessment-draft', JSON.stringify(data));
-  }, [data]);
+    if (existingData) {
+      setData({ ...createEmptyGoalsData(), ...existingData });
+      // Only jump to review if not currently editing
+      if (!isEditing) {
+        setPhase(7);
+      }
+      // Clear localStorage draft when we have saved data
+      localStorage.removeItem('goals-assessment-draft');
+    }
+  }, [existingData, isEditing]);
 
-  // Load from localStorage on mount
+  // Auto-save to localStorage (only when editing/creating new)
+  useEffect(() => {
+    // Only save to localStorage if no existingData or actively editing
+    if (!existingData || isEditing) {
+      localStorage.setItem('goals-assessment-draft', JSON.stringify(data));
+    }
+  }, [data, existingData, isEditing]);
+
+  // Load from localStorage on mount (only if no existing data)
   useEffect(() => {
     if (!existingData) {
       const saved = localStorage.getItem('goals-assessment-draft');
@@ -366,16 +390,24 @@ export default function GoalsAssessment({ athlete, existingData }: GoalsAssessme
       {/* Navigation */}
       <div className="flex justify-between">
         <button
-          onClick={goBack}
-          disabled={phase === 1}
+          onClick={() => {
+            if (phase === 7 && existingData && !isEditing) {
+              // Start editing from phase 1
+              setIsEditing(true);
+              setPhase(1);
+            } else {
+              goBack();
+            }
+          }}
+          disabled={phase === 1 && isEditing}
           className={`px-6 py-3 rounded-lg font-medium transition-all flex items-center gap-2 ${
-            phase === 1
+            phase === 1 && isEditing
               ? 'bg-ruth-card text-gray-500 cursor-not-allowed'
               : 'bg-ruth-card text-white hover:bg-ruth-border'
           }`}
         >
           <ArrowLeft className="w-4 h-4" />
-          Back
+          {phase === 7 && existingData && !isEditing ? 'Edit Assessment' : 'Back'}
         </button>
 
         {phase < 7 ? (
@@ -392,14 +424,26 @@ export default function GoalsAssessment({ athlete, existingData }: GoalsAssessme
             <ArrowRight className="w-4 h-4" />
           </button>
         ) : (
-          <button
-            onClick={handleSave}
-            disabled={isSubmitting}
-            className="px-6 py-3 bg-gradient-to-r from-emerald-500 to-cyan-500 text-white rounded-lg font-medium hover:opacity-90 transition-all flex items-center gap-2"
-          >
-            {isSubmitting ? 'Saving...' : 'Save Assessment'}
-            <CheckCircle className="w-4 h-4" />
-          </button>
+          <div className="flex gap-3">
+            {existingData && !isEditing ? (
+              <Link
+                href="/dashboard"
+                className="px-6 py-3 bg-gradient-ruth text-white rounded-lg font-medium hover:opacity-90 transition-all flex items-center gap-2"
+              >
+                Back to Dashboard
+                <ArrowRight className="w-4 h-4" />
+              </Link>
+            ) : (
+              <button
+                onClick={handleSave}
+                disabled={isSubmitting}
+                className="px-6 py-3 bg-gradient-to-r from-emerald-500 to-cyan-500 text-white rounded-lg font-medium hover:opacity-90 transition-all flex items-center gap-2"
+              >
+                {isSubmitting ? 'Saving...' : isEditing ? 'Update Assessment' : 'Save Assessment'}
+                <CheckCircle className="w-4 h-4" />
+              </button>
+            )}
+          </div>
         )}
       </div>
     </div>
