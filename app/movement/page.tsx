@@ -1,47 +1,48 @@
 import { redirect } from 'next/navigation';
 import { getCurrentUser } from '@/lib/auth';
-import { getAthlete, getSheetData } from '@/lib/sheets';
+import { getProfileByEmail } from '@/lib/assessment-profile';
+import { getLatestMovementAssessment } from '@/lib/assessments/movement';
 import Navbar from '@/components/Navbar';
 import MovementAssessment from './MovementAssessment';
 import { MovementData } from '@/lib/movement-data';
 
 export default async function MovementPage() {
   const user = await getCurrentUser();
-  
+
   if (!user) {
     redirect('/login');
   }
 
-  const athlete = await getAthlete(user.email);
-  
+  const profile = await getProfileByEmail(user.email);
+
   // Check if athlete has required profile data
-  if (!athlete?.gender) {
+  if (!profile?.gender) {
     redirect('/profile?message=Please complete your profile first');
   }
 
-  // Try to load existing movement data
+  // Try to load existing movement data from Supabase
   let existingData: MovementData | undefined;
   try {
-    const savedData = await getSheetData('movement', user.email);
-    if (savedData && savedData.movementData) {
-      existingData = JSON.parse(savedData.movementData);
+    const savedAssessment = await getLatestMovementAssessment(profile.id);
+    if (savedAssessment?.raw_data) {
+      existingData = savedAssessment.raw_data as MovementData;
     }
-  } catch (err) {
+  } catch {
     // No existing data, that's fine
   }
 
   return (
     <div className="min-h-screen bg-ruth-dark">
-      <Navbar userName={athlete?.name || user.name} />
-      
+      <Navbar userName={profile.name || user.name} />
+
       <main className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <MovementAssessment 
+        <MovementAssessment
           athlete={{
             email: user.email,
-            name: athlete?.name || user.name || '',
-            gender: athlete?.gender as 'male' | 'female' | undefined,
-            weight: athlete?.weight,
-            competitionTier: athlete?.competitionTier,
+            name: profile.name || user.name || '',
+            gender: profile.gender as 'male' | 'female' | undefined,
+            weight: profile.weight_lbs,
+            competitionTier: profile.competition_tier,
           }}
           existingData={existingData}
         />
