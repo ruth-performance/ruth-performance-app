@@ -7,8 +7,9 @@ import {
   StrengthData,
   analyzeStrength,
   LIFT_INFO,
-  getAssessmentColor,
-  getStatusColor,
+  LIFT_LABELS,
+  formatGap,
+  getGapColor,
   lbsToKg,
   kgToLbs,
 } from '@/lib/strength-data';
@@ -340,112 +341,113 @@ export default function StrengthAssessment({ athlete, existingData }: StrengthAs
           {/* Summary Cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div className="bg-white/[0.03] border border-white/[0.08] rounded-xl p-4 text-center">
-              <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">Avg vs Elite</div>
-              <div className="text-2xl font-bold" style={{ color: getAssessmentColor(
-                analysis.summary.avgEliteRatio >= 95 ? 'elite' :
-                analysis.summary.avgEliteRatio >= 80 ? 'strong' :
-                analysis.summary.avgEliteRatio >= 65 ? 'developing' : 'priority'
-              )}}>
-                {analysis.summary.avgEliteRatio}%
+              <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">Lifts Entered</div>
+              <div className="text-2xl font-bold text-white">
+                {analysis.summary.totalLiftsEntered}
+              </div>
+            </div>
+
+            <div className="bg-white/[0.03] border border-white/[0.08] rounded-xl p-4 text-center">
+              <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">At Top-15</div>
+              <div className="text-2xl font-bold text-green-400">
+                {analysis.summary.liftsAtTop15} / {analysis.summary.totalLiftsEntered}
+              </div>
+            </div>
+
+            <div className="bg-white/[0.03] border border-white/[0.08] rounded-xl p-4 text-center">
+              <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">At Top-5</div>
+              <div className="text-2xl font-bold text-purple-400">
+                {analysis.summary.liftsAtTop5} / {analysis.summary.totalLiftsEntered}
               </div>
             </div>
 
             <div className="bg-white/[0.03] border border-white/[0.08] rounded-xl p-4 text-center">
               <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">Squat:BW</div>
               <div className="text-2xl font-bold text-orange-400">
-                {analysis.lifts.backSquat?.bwRatio?.toFixed(2) || '--'}x
-              </div>
-            </div>
-
-            <div className="bg-white/[0.03] border border-white/[0.08] rounded-xl p-4 text-center">
-              <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">Strongest</div>
-              <div className="text-lg font-bold text-green-400 truncate">
-                {analysis.summary.strongestLift || '--'}
-              </div>
-            </div>
-
-            <div className="bg-white/[0.03] border border-white/[0.08] rounded-xl p-4 text-center">
-              <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">Weakest</div>
-              <div className="text-lg font-bold text-red-400 truncate">
-                {analysis.summary.weakestLift || '--'}
+                {analysis.liftGaps.back_squat
+                  ? (analysis.liftGaps.back_squat.actual / athlete.weight).toFixed(2)
+                  : '--'}x
               </div>
             </div>
           </div>
 
-          {/* Body Composition */}
+          {/* Target Bodyweight */}
           {analysis.bodyComp && (
             <div className="bg-white/[0.03] border border-white/[0.08] rounded-xl p-4">
               <div className="flex items-center gap-2 mb-3">
                 <Scale className="w-4 h-4 text-cyan-400" />
-                <span className="text-sm font-semibold text-cyan-400">Body Composition</span>
+                <span className="text-sm font-semibold text-cyan-400">Target Bodyweight</span>
               </div>
-              <div className="flex items-center justify-between">
+              <div className="grid grid-cols-3 gap-4 mb-3">
                 <div>
-                  <span className="text-gray-400 text-sm">Current: </span>
-                  <span className="text-white font-medium">{analysis.bodyComp.currentWeight} lbs</span>
+                  <div className="text-[10px] text-gray-500 uppercase">Current</div>
+                  <div className="text-lg font-bold text-white">{analysis.bodyComp.currentWeight} lb</div>
                 </div>
                 <div>
-                  <span className="text-gray-400 text-sm">Elite Range: </span>
-                  <span className="text-white font-medium">
-                    {analysis.bodyComp.idealWeightRange.min}-{analysis.bodyComp.idealWeightRange.max} lbs
-                  </span>
+                  <div className="text-[10px] text-gray-500 uppercase">Elite Range</div>
+                  <div className="text-lg font-bold text-white">
+                    {analysis.bodyComp.targetLow}-{analysis.bodyComp.targetHigh} lb
+                  </div>
                 </div>
-                <span className={`px-2 py-1 rounded text-xs font-medium ${
-                  analysis.bodyComp.status === 'ideal' ? 'bg-green-500/20 text-green-400' :
-                  analysis.bodyComp.status === 'under' ? 'bg-blue-500/20 text-blue-400' :
-                  'bg-orange-500/20 text-orange-400'
-                }`}>
-                  {analysis.bodyComp.status === 'ideal' ? 'Optimal' :
-                   analysis.bodyComp.status === 'under' ? 'Below Range' : 'Above Range'}
-                </span>
+                <div>
+                  <div className="text-[10px] text-gray-500 uppercase">Gap</div>
+                  <div className={`text-lg font-bold ${
+                    Math.abs(analysis.bodyComp.gap) <= 5 ? 'text-green-400' :
+                    analysis.bodyComp.gap > 0 ? 'text-orange-400' : 'text-blue-400'
+                  }`}>
+                    {analysis.bodyComp.gap > 0 ? '+' : ''}{analysis.bodyComp.gap} lb
+                  </div>
+                </div>
+              </div>
+              <div className={`text-sm p-2 rounded ${
+                Math.abs(analysis.bodyComp.gap) <= 5 ? 'bg-green-500/10 text-green-400' :
+                analysis.bodyComp.gap > 0 ? 'bg-orange-500/10 text-orange-400' : 'bg-blue-500/10 text-blue-400'
+              }`}>
+                {analysis.bodyComp.note}
               </div>
             </div>
           )}
 
-          {/* Lifts Table */}
+          {/* Lift Standards Table */}
           <div className="bg-white/[0.03] border border-white/[0.08] rounded-xl p-4">
             <div className="text-sm font-semibold text-orange-400 uppercase tracking-wider mb-4">
-              Lift Analysis
+              Lift Standards vs Elite
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-white/10">
                     <th className="text-left py-2 px-2 text-gray-500 font-medium">LIFT</th>
-                    <th className="text-center py-2 px-2 text-gray-500 font-medium">1RM</th>
-                    <th className="text-center py-2 px-2 text-gray-500 font-medium">BW RATIO</th>
-                    <th className="text-center py-2 px-2 text-gray-500 font-medium">VS ELITE</th>
-                    <th className="text-center py-2 px-2 text-gray-500 font-medium">STATUS</th>
+                    <th className="text-center py-2 px-2 text-gray-500 font-medium">ACTUAL</th>
+                    <th className="text-center py-2 px-2 text-gray-500 font-medium">TOP-15</th>
+                    <th className="text-center py-2 px-2 text-gray-500 font-medium">GAP</th>
+                    <th className="text-center py-2 px-2 text-gray-500 font-medium">TOP-5</th>
+                    <th className="text-center py-2 px-2 text-gray-500 font-medium">GAP</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {Object.entries(analysis.lifts).map(([key, lift]) => {
-                    if (!lift.value) return null;
-                    const info = LIFT_INFO[key];
+                  {Object.entries(LIFT_LABELS).map(([key, label]) => {
+                    const gap = analysis.liftGaps[key];
+                    if (!gap) return null;
                     return (
                       <tr key={key} className="border-b border-white/5">
                         <td className="py-2.5 px-2">
-                          <span className="text-white font-medium">{info.name}</span>
+                          <span className="text-white font-medium">{label}</span>
                         </td>
                         <td className="py-2.5 px-2 text-center text-white font-mono">
-                          {lift.value} lb
+                          {gap.actual} lb
                         </td>
-                        <td className="py-2.5 px-2 text-center text-gray-300 font-mono">
-                          {lift.bwRatio?.toFixed(2)}x
+                        <td className="py-2.5 px-2 text-center text-gray-400 font-mono">
+                          {gap.top15} lb
                         </td>
-                        <td className="py-2.5 px-2 text-center font-mono font-semibold" style={{ color: getAssessmentColor(lift.assessment) }}>
-                          {lift.eliteRatio}%
+                        <td className="py-2.5 px-2 text-center font-mono font-semibold" style={{ color: getGapColor(gap.gapTop15) }}>
+                          {formatGap(gap.gapTop15)}
                         </td>
-                        <td className="py-2.5 px-2 text-center">
-                          <span
-                            className="px-2 py-1 rounded text-[10px] font-semibold uppercase"
-                            style={{
-                              backgroundColor: `${getAssessmentColor(lift.assessment)}20`,
-                              color: getAssessmentColor(lift.assessment),
-                            }}
-                          >
-                            {lift.assessment}
-                          </span>
+                        <td className="py-2.5 px-2 text-center text-gray-400 font-mono">
+                          {gap.top5} lb
+                        </td>
+                        <td className="py-2.5 px-2 text-center font-mono font-semibold" style={{ color: getGapColor(gap.gapTop5, true) }}>
+                          {formatGap(gap.gapTop5)}
                         </td>
                       </tr>
                     );
@@ -456,35 +458,51 @@ export default function StrengthAssessment({ athlete, existingData }: StrengthAs
           </div>
 
           {/* Power Transfer Ratios */}
-          {analysis.ratios.length > 0 && (
+          {analysis.powerRatios.length > 0 && (
             <div className="bg-white/[0.03] border border-white/[0.08] rounded-xl p-4">
               <div className="text-sm font-semibold text-purple-400 uppercase tracking-wider mb-4">
                 Power Transfer Ratios
               </div>
-              <div className="space-y-3">
-                {analysis.ratios.map((ratio) => (
-                  <div key={ratio.name} className="flex items-center justify-between p-3 bg-black/20 rounded-lg">
-                    <div>
-                      <div className="text-white font-medium text-sm">{ratio.name}</div>
-                      <div className="text-xs text-gray-500">
-                        Ideal: {ratio.ideal} (range: {ratio.min}-{ratio.max})
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="font-mono font-bold" style={{ color: getStatusColor(ratio.status) }}>
-                        {ratio.actual?.toFixed(2)}
-                      </div>
-                      <div className="text-[10px] uppercase font-semibold" style={{ color: getStatusColor(ratio.status) }}>
-                        {ratio.status}
-                      </div>
-                    </div>
-                  </div>
-                ))}
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-white/10">
+                      <th className="text-left py-2 px-2 text-gray-500 font-medium">RATIO</th>
+                      <th className="text-center py-2 px-2 text-gray-500 font-medium">YOURS</th>
+                      <th className="text-center py-2 px-2 text-gray-500 font-medium">ELITE</th>
+                      <th className="text-center py-2 px-2 text-gray-500 font-medium">DIFF</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {analysis.powerRatios.map((ratio) => {
+                      if (ratio.athleteRatio === null) return null;
+                      return (
+                        <tr key={ratio.key} className="border-b border-white/5">
+                          <td className="py-2.5 px-2">
+                            <span className="text-white font-medium">{ratio.name}</span>
+                          </td>
+                          <td className="py-2.5 px-2 text-center text-white font-mono">
+                            {(ratio.athleteRatio * 100).toFixed(1)}%
+                          </td>
+                          <td className="py-2.5 px-2 text-center text-gray-400 font-mono">
+                            {(ratio.eliteRatio * 100).toFixed(1)}%
+                          </td>
+                          <td className={`py-2.5 px-2 text-center font-mono font-semibold ${
+                            ratio.isGood ? 'text-green-400' : 'text-red-400'
+                          }`}>
+                            {ratio.difference !== null && ratio.difference >= 0 ? '+' : ''}
+                            {ratio.difference !== null ? (ratio.difference * 100).toFixed(1) : '--'}%
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}
 
-          {/* Priorities */}
+          {/* Training Priorities */}
           {analysis.priorities.length > 0 && (
             <div className="bg-white/[0.03] border border-white/[0.08] rounded-xl p-4">
               <div className="flex items-center gap-2 mb-4">
@@ -495,19 +513,35 @@ export default function StrengthAssessment({ athlete, existingData }: StrengthAs
               </div>
               <div className="space-y-3">
                 {analysis.priorities.map((priority) => (
-                  <div key={priority.lift} className="p-3 bg-red-500/5 border border-red-500/20 rounded-lg">
+                  <div
+                    key={priority.liftKey}
+                    className={`p-3 rounded-lg ${
+                      priority.rank === 1
+                        ? 'bg-orange-500/10 border-2 border-orange-500/50'
+                        : 'bg-red-500/5 border border-red-500/20'
+                    }`}
+                  >
                     <div className="flex items-center justify-between mb-1">
                       <div className="flex items-center gap-2">
-                        <span className="w-5 h-5 rounded-full bg-red-500 text-white text-xs font-bold flex items-center justify-center">
+                        <span className={`w-6 h-6 rounded-full text-white text-xs font-bold flex items-center justify-center ${
+                          priority.rank === 1 ? 'bg-orange-500' : 'bg-red-500'
+                        }`}>
                           {priority.rank}
                         </span>
-                        <span className="text-white font-medium">{priority.liftName}</span>
+                        <span className="text-white font-medium">
+                          {priority.lift}
+                          {priority.gap15 > 0 && (
+                            <span className="text-red-400 ml-2">+{Math.round(priority.gap15)} lb</span>
+                          )}
+                        </span>
                       </div>
-                      <span className="text-red-400 font-mono text-sm">
-                        {priority.gap}% gap
-                      </span>
+                      {priority.ratioPenalty > 0 && (
+                        <span className="text-xs text-purple-400">
+                          Ratio: -{(priority.ratioPenalty / 100).toFixed(0)}%
+                        </span>
+                      )}
                     </div>
-                    <p className="text-xs text-gray-400 ml-7">{priority.recommendation}</p>
+                    <p className="text-xs text-gray-400 ml-8">{priority.rationale}</p>
                   </div>
                 ))}
               </div>

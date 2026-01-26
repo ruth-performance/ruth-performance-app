@@ -1,48 +1,38 @@
 // ============================================================================
-// STRENGTH DATA DEFINITIONS
+// STRENGTH DATA DEFINITIONS - Matching Original MVP Logic
 // ============================================================================
 
-// Elite benchmarks based on CrossFit Games athlete data
-export const STRENGTH_BENCHMARKS = {
-  male: {
-    // BW ratios (lift / bodyweight)
-    backSquatBW: 2.0,      // 2x bodyweight back squat
-    frontSquatBW: 1.7,     // 1.7x bodyweight front squat
-    deadliftBW: 2.3,       // 2.3x bodyweight deadlift
-    cleanBW: 1.4,          // 1.4x bodyweight clean
-    cleanAndJerkBW: 1.35,  // 1.35x bodyweight C&J
-    snatchBW: 1.1,         // 1.1x bodyweight snatch
-    strictPressBW: 0.75,   // 0.75x bodyweight strict press
-    pushPressBW: 0.95,     // 0.95x bodyweight push press
-    benchPressBW: 1.3,     // 1.3x bodyweight bench press
-  },
+// Elite benchmarks from CrossFit Games athlete data (absolute values in lbs)
+export const BENCHMARKS = {
   female: {
-    backSquatBW: 1.7,
-    frontSquatBW: 1.45,
-    deadliftBW: 2.0,
-    cleanBW: 1.15,
-    cleanAndJerkBW: 1.1,
-    snatchBW: 0.9,
-    strictPressBW: 0.55,
-    pushPressBW: 0.75,
-    benchPressBW: 0.9,
+    bmi: { low: 24.5, high: 25.0 },
+    lifts: {
+      back_squat: { top15: 305, top5: 330 },
+      deadlift: { top15: 345, top5: 395 },
+      snatch: { top15: 192, top5: 205 },
+      clean: { top15: 247, top5: 265 },
+      jerk: { top15: 260, top5: 276 }
+    }
   },
+  male: {
+    bmi: { low: 27.5, high: 28.0 },
+    lifts: {
+      back_squat: { top15: 485, top5: 505 },
+      deadlift: { top15: 525, top5: 575 },
+      snatch: { top15: 296, top5: 309 },
+      clean: { top15: 380, top5: 405 },
+      jerk: { top15: 376, top5: 400 }
+    }
+  }
 };
 
-// Ideal power transfer ratios between lifts
-export const POWER_RATIOS = {
-  frontToBackSquat: { ideal: 0.85, min: 0.80, max: 0.90 },
-  cleanToFrontSquat: { ideal: 0.85, min: 0.80, max: 0.92 },
-  snatchToClean: { ideal: 0.80, min: 0.75, max: 0.85 },
-  jerkToClean: { ideal: 1.05, min: 1.00, max: 1.15 }, // C&J should be slightly higher than clean
-  deadliftToBackSquat: { ideal: 1.15, min: 1.10, max: 1.25 },
-  strictToPress: { ideal: 0.80, min: 0.75, max: 0.85 }, // Strict press to push press
-};
-
-// BMI targets for elite CrossFit athletes (from conditioning-data.ts)
-export const BMI_TARGETS = {
-  male: { min: 28, max: 30 },
-  female: { min: 23.7, max: 24.4 },
+// Lift labels for display
+export const LIFT_LABELS: Record<string, string> = {
+  back_squat: 'Back Squat',
+  deadlift: 'Deadlift',
+  snatch: 'Snatch',
+  clean: 'Clean',
+  jerk: 'Clean & Jerk'
 };
 
 // ============================================================================
@@ -50,7 +40,6 @@ export const BMI_TARGETS = {
 // ============================================================================
 
 export interface StrengthData {
-  // Primary lifts (stored in lbs)
   backSquat?: string;
   frontSquat?: string;
   deadlift?: string;
@@ -62,49 +51,55 @@ export interface StrengthData {
   benchPress?: string;
 }
 
-export interface LiftAnalysis {
-  value: number | null;
-  bwRatio: number | null;
-  eliteRatio: number | null; // Percentage of elite standard
-  assessment: 'elite' | 'strong' | 'developing' | 'priority' | null;
+export interface LiftGap {
+  actual: number;
+  top15: number;
+  top5: number;
+  gapTop15: number; // benchmark - actual (positive = below benchmark)
+  gapTop5: number;
+  meetsTop15: boolean;
+  meetsTop5: boolean;
 }
 
-export interface RatioAnalysis {
+export interface PowerRatio {
   name: string;
-  actual: number | null;
-  ideal: number;
-  min: number;
-  max: number;
-  status: 'optimal' | 'acceptable' | 'imbalanced' | null;
-  assessment: string;
+  key: string;
+  athleteRatio: number | null;
+  eliteRatio: number;
+  difference: number | null; // athlete - elite (positive = above elite)
+  isGood: boolean; // within 2% of elite or better
 }
 
 export interface StrengthPriority {
   rank: number;
   lift: string;
-  liftName: string;
-  category: 'absolute' | 'ratio';
-  currentValue: number;
-  eliteValue: number;
-  gap: number; // Percentage gap to elite
-  recommendation: string;
+  liftKey: string;
+  score: number;
+  gap15: number;
+  gap5: number;
+  ratioPenalty: number;
+  rationale: string;
+}
+
+export interface BodyCompAnalysis {
+  currentWeight: number;
+  targetLow: number;
+  targetHigh: number;
+  targetMid: number;
+  gap: number; // current - target mid (positive = over)
+  note: string;
 }
 
 export interface StrengthAnalysis {
-  lifts: Record<string, LiftAnalysis>;
-  ratios: RatioAnalysis[];
+  liftGaps: Record<string, LiftGap>;
+  powerRatios: PowerRatio[];
   priorities: StrengthPriority[];
+  bodyComp: BodyCompAnalysis | null;
   summary: {
-    strongestLift: string | null;
-    weakestLift: string | null;
-    avgEliteRatio: number;
     totalLiftsEntered: number;
+    liftsAtTop15: number;
+    liftsAtTop5: number;
   };
-  bodyComp: {
-    currentWeight: number;
-    idealWeightRange: { min: number; max: number };
-    status: 'under' | 'ideal' | 'over';
-  } | null;
 }
 
 // ============================================================================
@@ -125,71 +120,6 @@ export function parseWeight(value: string | undefined): number | null {
   return isNaN(num) ? null : num;
 }
 
-export function calculateIdealWeightRange(
-  heightInches: number,
-  gender: 'male' | 'female'
-): { min: number; max: number } {
-  const heightMeters = heightInches * 0.0254;
-  const targets = BMI_TARGETS[gender];
-
-  const minWeightKg = targets.min * (heightMeters * heightMeters);
-  const maxWeightKg = targets.max * (heightMeters * heightMeters);
-
-  return {
-    min: Math.round(minWeightKg * 2.20462),
-    max: Math.round(maxWeightKg * 2.20462),
-  };
-}
-
-function getLiftAssessment(eliteRatio: number): 'elite' | 'strong' | 'developing' | 'priority' {
-  if (eliteRatio >= 95) return 'elite';
-  if (eliteRatio >= 80) return 'strong';
-  if (eliteRatio >= 65) return 'developing';
-  return 'priority';
-}
-
-function getRatioStatus(actual: number, min: number, max: number): 'optimal' | 'acceptable' | 'imbalanced' {
-  if (actual >= min && actual <= max) return 'optimal';
-  const tolerance = 0.05; // 5% tolerance outside range
-  if (actual >= min - tolerance && actual <= max + tolerance) return 'acceptable';
-  return 'imbalanced';
-}
-
-function getRatioAssessment(name: string, actual: number, ideal: number, status: string): string {
-  if (status === 'optimal') return 'Excellent power transfer';
-
-  const diff = actual - ideal;
-  const percentDiff = Math.abs(diff / ideal * 100).toFixed(0);
-
-  if (name === 'Front:Back Squat') {
-    if (diff < 0) return `Front squat relatively weak (${percentDiff}% below ideal) — focus on front squat development`;
-    return `Front squat relatively strong — back squat may need attention`;
-  }
-
-  if (name === 'Clean:Front Squat') {
-    if (diff < 0) return `Clean technique limiting strength expression (${percentDiff}% below ideal)`;
-    return `Strong clean relative to squat — good power transfer`;
-  }
-
-  if (name === 'Snatch:Clean') {
-    if (diff < 0) return `Snatch lagging behind clean (${percentDiff}% below ideal) — prioritize snatch technique`;
-    return `Strong snatch relative to clean`;
-  }
-
-  if (name === 'C&J:Clean') {
-    if (diff < 0) return `Jerk limiting C&J (${percentDiff}% below ideal) — focus on jerk development`;
-    return `Strong jerk relative to clean`;
-  }
-
-  if (name === 'Deadlift:Back Squat') {
-    if (diff > 0.05) return `Deadlift dominant — may indicate quad weakness or squat technique issues`;
-    if (diff < -0.05) return `Squat dominant — posterior chain may need development`;
-    return 'Good balance between squat and hinge patterns';
-  }
-
-  return status === 'acceptable' ? 'Within acceptable range' : 'Imbalance detected';
-}
-
 // ============================================================================
 // MAIN ANALYSIS FUNCTION
 // ============================================================================
@@ -200,250 +130,188 @@ export function analyzeStrength(
   weightLbs: number,
   heightInches?: number
 ): StrengthAnalysis {
-  const benchmarks = STRENGTH_BENCHMARKS[gender];
+  const benchmark = BENCHMARKS[gender];
 
-  // Parse all lift values
-  const liftsRaw = {
-    backSquat: parseWeight(data.backSquat),
-    frontSquat: parseWeight(data.frontSquat),
+  // Parse lift values (convert to internal keys)
+  const liftsLb: Record<string, number | null> = {
+    back_squat: parseWeight(data.backSquat),
     deadlift: parseWeight(data.deadlift),
-    clean: parseWeight(data.clean),
-    cleanAndJerk: parseWeight(data.cleanAndJerk),
     snatch: parseWeight(data.snatch),
-    strictPress: parseWeight(data.strictPress),
-    pushPress: parseWeight(data.pushPress),
-    benchPress: parseWeight(data.benchPress),
+    clean: parseWeight(data.clean),
+    jerk: parseWeight(data.cleanAndJerk),
   };
 
-  // Analyze each lift
-  const lifts: Record<string, LiftAnalysis> = {};
-  const liftNames: Record<string, string> = {
-    backSquat: 'Back Squat',
-    frontSquat: 'Front Squat',
-    deadlift: 'Deadlift',
-    clean: 'Clean',
-    cleanAndJerk: 'Clean & Jerk',
-    snatch: 'Snatch',
-    strictPress: 'Strict Press',
-    pushPress: 'Push Press',
-    benchPress: 'Bench Press',
-  };
+  // Calculate gaps for each lift
+  const liftGaps: Record<string, LiftGap> = {};
+  let totalLifts = 0;
+  let atTop15 = 0;
+  let atTop5 = 0;
 
-  const benchmarkMap: Record<string, number> = {
-    backSquat: benchmarks.backSquatBW,
-    frontSquat: benchmarks.frontSquatBW,
-    deadlift: benchmarks.deadliftBW,
-    clean: benchmarks.cleanBW,
-    cleanAndJerk: benchmarks.cleanAndJerkBW,
-    snatch: benchmarks.snatchBW,
-    strictPress: benchmarks.strictPressBW,
-    pushPress: benchmarks.pushPressBW,
-    benchPress: benchmarks.benchPressBW,
-  };
+  for (const [key, value] of Object.entries(liftsLb)) {
+    if (value === null) continue;
 
-  let totalEliteRatio = 0;
-  let liftCount = 0;
-  let strongestLift: { name: string; ratio: number } | null = null;
-  let weakestLift: { name: string; ratio: number } | null = null;
+    const benchmarkLift = benchmark.lifts[key as keyof typeof benchmark.lifts];
+    if (!benchmarkLift) continue;
 
-  for (const [key, value] of Object.entries(liftsRaw)) {
-    if (value === null) {
-      lifts[key] = { value: null, bwRatio: null, eliteRatio: null, assessment: null };
-      continue;
-    }
+    const gapTop15 = benchmarkLift.top15 - value;
+    const gapTop5 = benchmarkLift.top5 - value;
 
-    const bwRatio = value / weightLbs;
-    const eliteBWRatio = benchmarkMap[key];
-    const eliteRatio = (bwRatio / eliteBWRatio) * 100;
-
-    lifts[key] = {
-      value,
-      bwRatio: Math.round(bwRatio * 100) / 100,
-      eliteRatio: Math.round(eliteRatio),
-      assessment: getLiftAssessment(eliteRatio),
+    liftGaps[key] = {
+      actual: value,
+      top15: benchmarkLift.top15,
+      top5: benchmarkLift.top5,
+      gapTop15,
+      gapTop5,
+      meetsTop15: gapTop15 <= 0,
+      meetsTop5: gapTop5 <= 0,
     };
 
-    totalEliteRatio += eliteRatio;
-    liftCount++;
-
-    if (!strongestLift || eliteRatio > strongestLift.ratio) {
-      strongestLift = { name: liftNames[key], ratio: eliteRatio };
-    }
-    if (!weakestLift || eliteRatio < weakestLift.ratio) {
-      weakestLift = { name: liftNames[key], ratio: eliteRatio };
-    }
+    totalLifts++;
+    if (gapTop15 <= 0) atTop15++;
+    if (gapTop5 <= 0) atTop5++;
   }
 
-  // Analyze power transfer ratios
-  const ratios: RatioAnalysis[] = [];
+  // Calculate ideal ratios from benchmarks
+  const idealRatios = {
+    snatch_to_squat: benchmark.lifts.snatch.top15 / benchmark.lifts.back_squat.top15,
+    clean_to_squat: benchmark.lifts.clean.top15 / benchmark.lifts.back_squat.top15,
+    jerk_to_squat: benchmark.lifts.jerk.top15 / benchmark.lifts.back_squat.top15,
+    clean_to_deadlift: benchmark.lifts.clean.top15 / benchmark.lifts.deadlift.top15,
+  };
 
-  // Front:Back Squat
-  if (liftsRaw.frontSquat && liftsRaw.backSquat) {
-    const actual = liftsRaw.frontSquat / liftsRaw.backSquat;
-    const { ideal, min, max } = POWER_RATIOS.frontToBackSquat;
-    const status = getRatioStatus(actual, min, max);
-    ratios.push({
-      name: 'Front:Back Squat',
-      actual: Math.round(actual * 100) / 100,
-      ideal, min, max, status,
-      assessment: getRatioAssessment('Front:Back Squat', actual, ideal, status),
+  // Calculate athlete ratios
+  const athleteRatios: Record<string, number | null> = {
+    snatch_to_squat: liftsLb.snatch && liftsLb.back_squat ? liftsLb.snatch / liftsLb.back_squat : null,
+    clean_to_squat: liftsLb.clean && liftsLb.back_squat ? liftsLb.clean / liftsLb.back_squat : null,
+    jerk_to_squat: liftsLb.jerk && liftsLb.back_squat ? liftsLb.jerk / liftsLb.back_squat : null,
+    clean_to_deadlift: liftsLb.clean && liftsLb.deadlift ? liftsLb.clean / liftsLb.deadlift : null,
+  };
+
+  // Build power ratios array
+  const ratioLabels: Record<string, string> = {
+    snatch_to_squat: 'Snatch : Squat',
+    clean_to_squat: 'Clean : Squat',
+    jerk_to_squat: 'Jerk : Squat',
+    clean_to_deadlift: 'Clean : Deadlift',
+  };
+
+  const powerRatios: PowerRatio[] = [];
+  for (const [key, eliteRatio] of Object.entries(idealRatios)) {
+    const athleteRatio = athleteRatios[key];
+    const difference = athleteRatio !== null ? athleteRatio - eliteRatio : null;
+
+    powerRatios.push({
+      name: ratioLabels[key],
+      key,
+      athleteRatio,
+      eliteRatio,
+      difference,
+      isGood: difference !== null && difference >= -0.02, // within 2% or better
     });
   }
 
-  // Clean:Front Squat
-  if (liftsRaw.clean && liftsRaw.frontSquat) {
-    const actual = liftsRaw.clean / liftsRaw.frontSquat;
-    const { ideal, min, max } = POWER_RATIOS.cleanToFrontSquat;
-    const status = getRatioStatus(actual, min, max);
-    ratios.push({
-      name: 'Clean:Front Squat',
-      actual: Math.round(actual * 100) / 100,
-      ideal, min, max, status,
-      assessment: getRatioAssessment('Clean:Front Squat', actual, ideal, status),
-    });
-  }
-
-  // Snatch:Clean
-  if (liftsRaw.snatch && liftsRaw.clean) {
-    const actual = liftsRaw.snatch / liftsRaw.clean;
-    const { ideal, min, max } = POWER_RATIOS.snatchToClean;
-    const status = getRatioStatus(actual, min, max);
-    ratios.push({
-      name: 'Snatch:Clean',
-      actual: Math.round(actual * 100) / 100,
-      ideal, min, max, status,
-      assessment: getRatioAssessment('Snatch:Clean', actual, ideal, status),
-    });
-  }
-
-  // C&J:Clean
-  if (liftsRaw.cleanAndJerk && liftsRaw.clean) {
-    const actual = liftsRaw.cleanAndJerk / liftsRaw.clean;
-    const { ideal, min, max } = POWER_RATIOS.jerkToClean;
-    const status = getRatioStatus(actual, min, max);
-    ratios.push({
-      name: 'C&J:Clean',
-      actual: Math.round(actual * 100) / 100,
-      ideal, min, max, status,
-      assessment: getRatioAssessment('C&J:Clean', actual, ideal, status),
-    });
-  }
-
-  // Deadlift:Back Squat
-  if (liftsRaw.deadlift && liftsRaw.backSquat) {
-    const actual = liftsRaw.deadlift / liftsRaw.backSquat;
-    const { ideal, min, max } = POWER_RATIOS.deadliftToBackSquat;
-    const status = getRatioStatus(actual, min, max);
-    ratios.push({
-      name: 'Deadlift:Back Squat',
-      actual: Math.round(actual * 100) / 100,
-      ideal, min, max, status,
-      assessment: getRatioAssessment('Deadlift:Back Squat', actual, ideal, status),
-    });
-  }
-
-  // Generate priorities
+  // Calculate priorities using MVP formula
   const priorities: StrengthPriority[] = [];
-  let priorityRank = 1;
 
-  // Add lifts below 80% elite as priorities
-  for (const [key, analysis] of Object.entries(lifts)) {
-    if (analysis.eliteRatio !== null && analysis.eliteRatio < 80) {
-      const eliteValue = benchmarkMap[key] * weightLbs;
-      priorities.push({
-        rank: priorityRank++,
-        lift: key,
-        liftName: liftNames[key],
-        category: 'absolute',
-        currentValue: analysis.value!,
-        eliteValue: Math.round(eliteValue),
-        gap: Math.round(100 - analysis.eliteRatio),
-        recommendation: getStrengthRecommendation(key, analysis.eliteRatio),
-      });
+  const ratioMap: Record<string, string> = {
+    snatch: 'snatch_to_squat',
+    clean: 'clean_to_squat',
+    jerk: 'jerk_to_squat',
+  };
+
+  for (const [key, label] of Object.entries(LIFT_LABELS)) {
+    if (!liftGaps[key]) continue;
+
+    const gap15 = liftGaps[key].gapTop15;
+    const gap5 = liftGaps[key].gapTop5;
+
+    // Ratio penalty for Olympic lifts
+    let ratioPenalty = 0;
+    if (ratioMap[key] && athleteRatios[ratioMap[key]] !== null) {
+      const diff = idealRatios[ratioMap[key] as keyof typeof idealRatios] - athleteRatios[ratioMap[key]]!;
+      ratioPenalty = Math.max(0, diff - 0.03) * 100;
     }
+
+    // Priority score formula from MVP
+    const score = 1.0 * Math.max(0, gap15) + 0.5 * Math.max(0, gap5) + 50 * ratioPenalty;
+
+    // Generate rationale
+    let rationale: string;
+    if (gap15 > 0 && ratioPenalty > 0.5) {
+      rationale = 'Below Top-15 with poor transfer — technique + strength';
+    } else if (gap15 > 0) {
+      rationale = 'Below Top-15 — absolute strength priority';
+    } else if (ratioPenalty > 0.5) {
+      rationale = 'Strong but poor transfer — technique focus';
+    } else if (gap5 > 0) {
+      rationale = 'At Top-15, pushing Top-5 — refine';
+    } else {
+      rationale = 'Exceeds Top-5 — maintain';
+    }
+
+    priorities.push({
+      rank: 0, // will be set after sorting
+      lift: label,
+      liftKey: key,
+      score,
+      gap15,
+      gap5,
+      ratioPenalty,
+      rationale,
+    });
   }
 
-  // Add imbalanced ratios as priorities
-  for (const ratio of ratios) {
-    if (ratio.status === 'imbalanced') {
-      priorities.push({
-        rank: priorityRank++,
-        lift: ratio.name,
-        liftName: ratio.name,
-        category: 'ratio',
-        currentValue: ratio.actual!,
-        eliteValue: ratio.ideal,
-        gap: Math.round(Math.abs((ratio.actual! - ratio.ideal) / ratio.ideal * 100)),
-        recommendation: ratio.assessment,
-      });
-    }
-  }
+  // Sort by score descending
+  priorities.sort((a, b) => b.score - a.score);
 
-  // Sort priorities by gap (biggest gaps first)
-  priorities.sort((a, b) => b.gap - a.gap);
+  // Assign ranks
   priorities.forEach((p, i) => p.rank = i + 1);
 
   // Body composition analysis
-  let bodyComp: StrengthAnalysis['bodyComp'] = null;
+  let bodyComp: BodyCompAnalysis | null = null;
   if (heightInches) {
-    const idealRange = calculateIdealWeightRange(heightInches, gender);
-    let status: 'under' | 'ideal' | 'over' = 'ideal';
-    if (weightLbs < idealRange.min) status = 'under';
-    else if (weightLbs > idealRange.max) status = 'over';
+    const heightM = heightInches * 0.0254;
+    const targetBwLowKg = benchmark.bmi.low * Math.pow(heightM, 2);
+    const targetBwHighKg = benchmark.bmi.high * Math.pow(heightM, 2);
+    const targetBwLowLb = targetBwLowKg * 2.20462;
+    const targetBwHighLb = targetBwHighKg * 2.20462;
+    const targetBwMidLb = (targetBwLowLb + targetBwHighLb) / 2;
+    const bwGap = weightLbs - targetBwMidLb;
+
+    let note: string;
+    if (Math.abs(bwGap) <= 5) {
+      note = 'Within elite range — maintain';
+    } else if (bwGap > 5) {
+      note = `${Math.round(bwGap)} lb over — consider recomp`;
+    } else {
+      note = `${Math.round(Math.abs(bwGap))} lb under — potential for mass gain`;
+    }
 
     bodyComp = {
       currentWeight: weightLbs,
-      idealWeightRange: idealRange,
-      status,
+      targetLow: Math.round(targetBwLowLb),
+      targetHigh: Math.round(targetBwHighLb),
+      targetMid: Math.round(targetBwMidLb),
+      gap: Math.round(bwGap),
+      note,
     };
   }
 
   return {
-    lifts,
-    ratios,
-    priorities: priorities.slice(0, 5), // Top 5 priorities
-    summary: {
-      strongestLift: strongestLift?.name || null,
-      weakestLift: weakestLift?.name || null,
-      avgEliteRatio: liftCount > 0 ? Math.round(totalEliteRatio / liftCount) : 0,
-      totalLiftsEntered: liftCount,
-    },
+    liftGaps,
+    powerRatios,
+    priorities: priorities.slice(0, 5), // Top 5
     bodyComp,
+    summary: {
+      totalLiftsEntered: totalLifts,
+      liftsAtTop15: atTop15,
+      liftsAtTop5: atTop5,
+    },
   };
 }
 
-function getStrengthRecommendation(lift: string, eliteRatio: number): string {
-  const gap = 100 - eliteRatio;
-
-  if (gap > 30) {
-    // More than 30% below elite
-    switch (lift) {
-      case 'backSquat':
-      case 'frontSquat':
-        return 'Focus on squat frequency (3-4x/week) with progressive overload';
-      case 'deadlift':
-        return 'Add dedicated deadlift days with accessory work';
-      case 'clean':
-      case 'cleanAndJerk':
-        return 'Prioritize clean technique work and pulling strength';
-      case 'snatch':
-        return 'Focus on snatch technique and overhead strength';
-      case 'strictPress':
-      case 'pushPress':
-        return 'Add overhead pressing volume and shoulder accessory work';
-      case 'benchPress':
-        return 'Include bench press in regular training rotation';
-      default:
-        return 'Prioritize this lift in training';
-    }
-  } else {
-    // 20-30% below elite
-    return 'Maintain current training with slight emphasis on progressive overload';
-  }
-}
-
 // ============================================================================
-// LIFT DISPLAY HELPERS
+// DISPLAY HELPERS
 // ============================================================================
 
 export const LIFT_INFO: Record<string, { name: string; color: string; required: boolean }> = {
@@ -458,21 +326,13 @@ export const LIFT_INFO: Record<string, { name: string; color: string; required: 
   benchPress: { name: 'Bench Press', color: '#3b82f6', required: false },
 };
 
-export function getAssessmentColor(assessment: string | null): string {
-  switch (assessment) {
-    case 'elite': return '#22c55e';
-    case 'strong': return '#3b82f6';
-    case 'developing': return '#f59e0b';
-    case 'priority': return '#ef4444';
-    default: return '#6b7280';
-  }
+export function formatGap(gap: number): string {
+  if (gap <= 0) return '✓';
+  return `+${Math.round(gap)}`;
 }
 
-export function getStatusColor(status: string | null): string {
-  switch (status) {
-    case 'optimal': return '#22c55e';
-    case 'acceptable': return '#f59e0b';
-    case 'imbalanced': return '#ef4444';
-    default: return '#6b7280';
-  }
+export function getGapColor(gap: number, isTop5: boolean = false): string {
+  if (gap <= 0) return '#22c55e'; // Green - meets benchmark
+  if (isTop5) return '#f59e0b'; // Amber for Top-5 gap
+  return '#ef4444'; // Red for Top-15 gap
 }

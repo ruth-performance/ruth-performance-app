@@ -42,32 +42,36 @@ export async function POST(request: NextRequest) {
     // Parse raw lift values for storage
     const data = strengthData as StrengthData;
 
+    // Calculate BW ratios from raw data
+    const backSquatLbs = parseWeight(data.backSquat);
+    const deadliftLbs = parseWeight(data.deadlift);
+    const cleanLbs = parseWeight(data.clean);
+    const snatchLbs = parseWeight(data.snatch);
+    const weightLbs = profile.weight_lbs;
+
     // Save to Supabase
     const assessment = await saveStrengthAssessment({
       profileId: profile.id,
-      backSquat: parseWeight(data.backSquat) || undefined,
+      backSquat: backSquatLbs || undefined,
       frontSquat: parseWeight(data.frontSquat) || undefined,
-      deadlift: parseWeight(data.deadlift) || undefined,
-      clean: parseWeight(data.clean) || undefined,
+      deadlift: deadliftLbs || undefined,
+      clean: cleanLbs || undefined,
       cleanAndJerk: parseWeight(data.cleanAndJerk) || undefined,
-      snatch: parseWeight(data.snatch) || undefined,
+      snatch: snatchLbs || undefined,
       strictPress: parseWeight(data.strictPress) || undefined,
       pushPress: parseWeight(data.pushPress) || undefined,
       benchPress: parseWeight(data.benchPress) || undefined,
-      // Calculated ratios
-      frontToBackSquat: analysis.ratios.find(r => r.name === 'Front:Back Squat')?.actual || undefined,
-      cleanToFrontSquat: analysis.ratios.find(r => r.name === 'Clean:Front Squat')?.actual || undefined,
-      snatchToClean: analysis.ratios.find(r => r.name === 'Snatch:Clean')?.actual || undefined,
-      jerkToClean: analysis.ratios.find(r => r.name === 'C&J:Clean')?.actual || undefined,
-      deadliftToBackSquat: analysis.ratios.find(r => r.name === 'Deadlift:Back Squat')?.actual || undefined,
-      // BW ratios
-      backSquatToBw: analysis.lifts.backSquat?.bwRatio || undefined,
-      deadliftToBw: analysis.lifts.deadlift?.bwRatio || undefined,
-      cleanToBw: analysis.lifts.clean?.bwRatio || undefined,
-      snatchToBw: analysis.lifts.snatch?.bwRatio || undefined,
-      // Analysis data
+      // Power transfer ratios from analysis
+      snatchToClean: analysis.powerRatios.find(r => r.key === 'snatch_to_squat')?.athleteRatio || undefined,
+      jerkToClean: analysis.powerRatios.find(r => r.key === 'jerk_to_squat')?.athleteRatio || undefined,
+      // BW ratios (calculated from raw data)
+      backSquatToBw: backSquatLbs && weightLbs ? backSquatLbs / weightLbs : undefined,
+      deadliftToBw: deadliftLbs && weightLbs ? deadliftLbs / weightLbs : undefined,
+      cleanToBw: cleanLbs && weightLbs ? cleanLbs / weightLbs : undefined,
+      snatchToBw: snatchLbs && weightLbs ? snatchLbs / weightLbs : undefined,
+      // Analysis data (new MVP format)
       strengthPriorities: analysis.priorities,
-      ratioAnalysis: analysis.ratios,
+      ratioAnalysis: analysis.powerRatios,
       rawData: strengthData,
     });
 
