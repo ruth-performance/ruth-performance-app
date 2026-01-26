@@ -4,6 +4,7 @@ import { getProfileByEmail } from '@/lib/assessment-profile';
 import { getLatestMovementAssessment } from '@/lib/assessments/movement';
 import { getLatestConditioningAssessment } from '@/lib/assessments/conditioning';
 import { getLatestStrengthAssessment } from '@/lib/assessments/strength';
+import { getLatestGoalsAssessment } from '@/lib/assessments/goals';
 import Navbar from '@/components/Navbar';
 import ModuleCard from '@/components/ModuleCard';
 import {
@@ -39,18 +40,20 @@ export default async function DashboardPage() {
   let strengthComplete = false;
   let conditioningComplete = false;
   const fitnessComplete = false; // Not yet implemented
-  const goalsComplete = false; // Not yet implemented
+  let goalsComplete = false;
 
   if (profile) {
-    const [movementData, strengthData, conditioningData] = await Promise.all([
+    const [movementData, strengthData, conditioningData, goalsData] = await Promise.all([
       getLatestMovementAssessment(profile.id).catch(() => null),
       getLatestStrengthAssessment(profile.id).catch(() => null),
       getLatestConditioningAssessment(profile.id).catch(() => null),
+      getLatestGoalsAssessment(profile.id).catch(() => null),
     ]);
 
     movementComplete = !!movementData;
     strengthComplete = !!strengthData;
     conditioningComplete = !!conditioningData;
+    goalsComplete = !!goalsData;
   }
   
   const completedCount = [movementComplete, strengthComplete, conditioningComplete, fitnessComplete, goalsComplete].filter(Boolean).length;
