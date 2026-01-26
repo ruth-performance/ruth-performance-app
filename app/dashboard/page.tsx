@@ -1,13 +1,16 @@
 import { redirect } from 'next/navigation';
 import { getCurrentUser } from '@/lib/auth';
-import { getAthlete, getSheetData } from '@/lib/sheets';
+import { getProfileByEmail } from '@/lib/assessment-profile';
+import { getLatestMovementAssessment } from '@/lib/assessments/movement';
+import { getLatestConditioningAssessment } from '@/lib/assessments/conditioning';
+import { getLatestStrengthAssessment } from '@/lib/assessments/strength';
 import Navbar from '@/components/Navbar';
 import ModuleCard from '@/components/ModuleCard';
-import { 
-  Move, 
-  Dumbbell, 
-  Zap, 
-  Target, 
+import {
+  Move,
+  Dumbbell,
+  Zap,
+  Target,
   Trophy,
   User,
   TrendingUp
@@ -15,27 +18,40 @@ import {
 
 export default async function DashboardPage() {
   const user = await getCurrentUser();
-  
+
   if (!user) {
     redirect('/login');
   }
 
-  const athlete = await getAthlete(user.email);
-  
-  // Check which assessments are completed
-  const [movementData, strengthData, conditioningData, fitnessData, goalsData] = await Promise.all([
-    getSheetData('movement', user.email).catch(() => null),
-    getSheetData('strength', user.email).catch(() => null),
-    getSheetData('conditioning', user.email).catch(() => null),
-    getSheetData('fitness', user.email).catch(() => null),
-    getSheetData('goals', user.email).catch(() => null),
-  ]);
-  
-  const movementComplete = !!movementData?.completedAt;
-  const strengthComplete = !!strengthData?.completedAt;
-  const conditioningComplete = !!conditioningData?.completedAt;
-  const fitnessComplete = !!fitnessData?.completedAt;
-  const goalsComplete = !!goalsData?.completedAt;
+  const profile = await getProfileByEmail(user.email);
+
+  // Convert Supabase profile to display format
+  const athlete = profile ? {
+    name: profile.name,
+    gender: profile.gender,
+    weight: profile.weight_lbs,
+    height: profile.height_inches,
+    competitionTier: profile.competition_tier,
+  } : null;
+
+  // Check which assessments are completed (only if profile exists)
+  let movementComplete = false;
+  let strengthComplete = false;
+  let conditioningComplete = false;
+  const fitnessComplete = false; // Not yet implemented
+  const goalsComplete = false; // Not yet implemented
+
+  if (profile) {
+    const [movementData, strengthData, conditioningData] = await Promise.all([
+      getLatestMovementAssessment(profile.id).catch(() => null),
+      getLatestStrengthAssessment(profile.id).catch(() => null),
+      getLatestConditioningAssessment(profile.id).catch(() => null),
+    ]);
+
+    movementComplete = !!movementData;
+    strengthComplete = !!strengthData;
+    conditioningComplete = !!conditioningData;
+  }
   
   const completedCount = [movementComplete, strengthComplete, conditioningComplete, fitnessComplete, goalsComplete].filter(Boolean).length;
 

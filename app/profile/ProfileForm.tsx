@@ -3,10 +3,18 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Save, Loader2 } from 'lucide-react';
-import type { Athlete } from '@/lib/sheets';
+
+interface AthleteProfile {
+  email: string;
+  name?: string;
+  gender?: 'male' | 'female';
+  weight?: number;
+  height?: number;
+  competitionTier?: 'open' | 'quarterfinals' | 'semifinals' | 'games';
+}
 
 interface ProfileFormProps {
-  athlete: Athlete | null;
+  athlete: AthleteProfile | null;
   email: string;
 }
 
