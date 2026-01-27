@@ -44,14 +44,34 @@ export async function GET() {
       getLatestConditioningAssessment(profile.id),
     ]);
 
-    // Get movement priorities if assessment exists
-    let movementPriorities: Array<{ rank: number; movement_name: string }> = [];
+    // Get movement priorities if assessment exists (includes confidence_rating for heat map)
+    let movementPriorities: Array<{ rank: number; movement_name: string; confidence_rating?: number }> = [];
+    let movementRatingsMap: MovementRatings = {};
     if (movementAssessment) {
       const priorities = await getMovementPriorities(movementAssessment.id);
       movementPriorities = priorities?.map((p) => ({
         rank: p.rank,
         movement_name: p.movement_name,
+        confidence_rating: p.confidence_rating,
       })) || [];
+
+      // Build ratings map from priorities for heat map
+      priorities?.forEach((p) => {
+        if (p.movement_name && p.confidence_rating) {
+          movementRatingsMap[p.movement_name] = p.confidence_rating;
+        }
+      });
+
+      // Also try to extract from raw_data as fallback
+      if (movementAssessment.raw_data && Object.keys(movementRatingsMap).length === 0) {
+        const rawData = movementAssessment.raw_data as Record<string, unknown>;
+        const ratingsData = (rawData.ratings as Record<string, number>) || rawData;
+        Object.entries(ratingsData).forEach(([key, value]) => {
+          if (typeof value === 'number' && value >= 1 && value <= 5) {
+            movementRatingsMap[key] = value;
+          }
+        });
+      }
     }
 
     // Generate PDF with jsPDF
@@ -164,20 +184,12 @@ export async function GET() {
 
     y += 5;
 
-    // Movement Heat Map
-    if (movementAssessment?.raw_data) {
-      const rawData = movementAssessment.raw_data as Record<string, unknown>;
-      const ratings: MovementRatings = {};
-
-      // Extract ratings from raw_data - they may be nested under 'ratings' or directly in raw_data
-      const ratingsData = (rawData.ratings as Record<string, number>) || rawData;
-      Object.entries(ratingsData).forEach(([key, value]) => {
-        if (typeof value === 'number' && value >= 1 && value <= 5) {
-          ratings[key] = value;
-        }
-      });
-
-      y = drawMovementHeatMap(doc, ratings, margin, y, contentWidth);
+    // Movement Heat Map - use ratings from priorities (more reliable than raw_data)
+    if (Object.keys(movementRatingsMap).length > 0) {
+      y = drawMovementHeatMap(doc, movementRatingsMap, margin, y, contentWidth);
+    } else if (movementAssessment) {
+      // Show heat map with no ratings (all gray) if assessment exists but no ratings
+      y = drawMovementHeatMap(doc, {}, margin, y, contentWidth);
     } else {
       y = addSectionTitle('Movement Heat Map', y);
       doc.setFontSize(9);

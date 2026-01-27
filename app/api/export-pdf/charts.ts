@@ -138,6 +138,38 @@ function getRatingColor(rating: number): [number, number, number] {
 }
 
 /**
+ * Flexible lookup for movement rating - tries multiple key formats
+ */
+function findRating(ratings: MovementRatings, movement: string): number {
+  // Try exact match first
+  if (ratings[movement] !== undefined) return ratings[movement];
+
+  // Try lowercase
+  const lower = movement.toLowerCase();
+  if (ratings[lower] !== undefined) return ratings[lower];
+
+  // Try with underscores instead of spaces
+  const underscored = movement.replace(/\s+/g, '_').toLowerCase();
+  if (ratings[underscored] !== undefined) return ratings[underscored];
+
+  // Try without parentheses content
+  const noParens = movement.replace(/\s*\([^)]*\)\s*/g, '').trim();
+  if (ratings[noParens] !== undefined) return ratings[noParens];
+
+  // Try partial match - find a key that contains this movement name
+  const keys = Object.keys(ratings);
+  for (const key of keys) {
+    const keyLower = key.toLowerCase();
+    const movementLower = movement.toLowerCase();
+    if (keyLower.includes(movementLower) || movementLower.includes(keyLower)) {
+      return ratings[key];
+    }
+  }
+
+  return 0; // No rating found
+}
+
+/**
  * Draw Movement Heat Map using jsPDF primitives
  */
 export function drawMovementHeatMap(
@@ -174,7 +206,8 @@ export function drawMovementHeatMap(
       const x = startX + col * cellWidth;
       const y = currentY + row * cellHeight;
 
-      const rating = ratings[movement] || 0;
+      // Use flexible lookup for rating
+      const rating = findRating(ratings, movement);
       const [r, g, b] = getRatingColor(rating);
 
       // Cell background - explicitly set fill color before each rect
