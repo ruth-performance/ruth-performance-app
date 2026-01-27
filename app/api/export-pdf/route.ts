@@ -4,6 +4,16 @@ import { getCurrentUser } from '@/lib/auth';
 import { getLatestMovementAssessment, getMovementPriorities } from '@/lib/assessments/movement';
 import { getLatestStrengthAssessment } from '@/lib/assessments/strength';
 import { getLatestGoalsAssessment } from '@/lib/assessments/goals';
+import { getLatestConditioningAssessment, TrainingZone } from '@/lib/assessments/conditioning';
+import {
+  RGB,
+  addPageBackground,
+  drawMovementHeatMap,
+  drawStrengthChart,
+  drawZoneTable,
+  drawSpeedCurve,
+  MovementRatings,
+} from './charts';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,9 +33,16 @@ export async function GET() {
       return new Response('Profile not found', { status: 404 });
     }
 
-    // Get movement assessment and priorities
+    // Get all assessments in parallel
+    const [movementAssessment, strengthAssessment, goalsAssessment, conditioningAssessment] = await Promise.all([
+      getLatestMovementAssessment(profile.id),
+      getLatestStrengthAssessment(profile.id),
+      getLatestGoalsAssessment(profile.id),
+      getLatestConditioningAssessment(profile.id),
+    ]);
+
+    // Get movement priorities if assessment exists
     let movementPriorities: Array<{ rank: number; movement_name: string }> = [];
-    const movementAssessment = await getLatestMovementAssessment(profile.id);
     if (movementAssessment) {
       const priorities = await getMovementPriorities(movementAssessment.id);
       movementPriorities = priorities?.map((p) => ({
@@ -34,124 +51,171 @@ export async function GET() {
       })) || [];
     }
 
-    // Get strength assessment
-    const strengthAssessment = await getLatestStrengthAssessment(profile.id);
-
-    // Get goals assessment
-    const goalsAssessment = await getLatestGoalsAssessment(profile.id);
-
     // Generate PDF with jsPDF
     const doc = new jsPDF('p', 'mm', 'a4');
     const pageWidth = doc.internal.pageSize.getWidth();
-    const margin = 20;
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 15;
     const contentWidth = pageWidth - margin * 2;
-    let y = 20;
-
-    // Colors (RGB tuples)
-    const orange: [number, number, number] = [249, 115, 22];
-    const darkGray: [number, number, number] = [30, 41, 59];
-    const medGray: [number, number, number] = [100, 116, 139];
-    const green: [number, number, number] = [22, 163, 74];
-    const red: [number, number, number] = [220, 38, 38];
 
     // Helper functions
-    const addSubtitle = (text: string) => {
+    const addHeader = () => {
+      // Header background
+      doc.setFillColor(...RGB.cardBg);
+      doc.rect(0, 0, pageWidth, 38, 'F');
+
+      // Orange accent line
+      doc.setFillColor(...RGB.accent);
+      doc.rect(0, 38, pageWidth, 2, 'F');
+
+      // Athlete name
+      doc.setFontSize(20);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(...RGB.text);
+      doc.text(profile.name || 'Athlete Report', margin, 16);
+
+      // Subtitle info
+      doc.setFontSize(9);
+      doc.setTextColor(...RGB.textMuted);
+      const tierText = profile.competition_tier
+        ? `${profile.competition_tier.charAt(0).toUpperCase() + profile.competition_tier.slice(1)} Athlete`
+        : 'Athlete';
+      const weightText = profile.weight_lbs ? ` | ${profile.weight_lbs} lbs` : '';
+      const genderText = profile.gender ? ` | ${profile.gender.charAt(0).toUpperCase() + profile.gender.slice(1)}` : '';
+      doc.text(`${tierText}${genderText}${weightText}`, margin, 24);
+
+      // Date
+      const dateStr = new Date().toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      });
+      doc.text(`Generated: ${dateStr}`, margin, 32);
+
+      // Logo/Brand
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(...RGB.accent);
+      doc.text('RUTH PERFORMANCE LAB', pageWidth - margin, 16, { align: 'right' });
+    };
+
+    const addFooter = (pageNum: number, totalPages: number) => {
+      doc.setFontSize(7);
+      doc.setTextColor(...RGB.textMuted);
+      doc.text(
+        `Ruth Performance Lab | ${profile.email} | Page ${pageNum} of ${totalPages}`,
+        pageWidth / 2,
+        pageHeight - 8,
+        { align: 'center' }
+      );
+    };
+
+    const addSectionTitle = (text: string, y: number): number => {
       doc.setFontSize(12);
       doc.setFont('helvetica', 'bold');
-      doc.setTextColor(...orange);
+      doc.setTextColor(...RGB.accent);
       doc.text(text.toUpperCase(), margin, y);
-      y += 8;
+      return y + 8;
     };
 
-    const addText = (text: string, indent = 0) => {
+    const addSubsectionTitle = (text: string, y: number): number => {
       doc.setFontSize(10);
-      doc.setFont('helvetica', 'normal');
-      doc.setTextColor(...darkGray);
-      const lines = doc.splitTextToSize(text, contentWidth - indent);
-      doc.text(lines, margin + indent, y);
-      y += lines.length * 5;
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(...RGB.text);
+      doc.text(text, margin, y);
+      return y + 6;
     };
 
-    const addSpace = (space = 8) => {
-      y += space;
-    };
+    // ========================================
+    // PAGE 1: Header + Sport Priorities + Movement Heat Map
+    // ========================================
+    addPageBackground(doc);
+    addHeader();
+    let y = 50;
 
-    const checkNewPage = () => {
-      if (y > 270) {
-        doc.addPage();
-        y = 20;
-      }
-    };
-
-    // === HEADER ===
-    doc.setFillColor(...darkGray);
-    doc.rect(0, 0, pageWidth, 40, 'F');
-
-    doc.setFillColor(...orange);
-    doc.rect(0, 40, pageWidth, 3, 'F');
-
-    doc.setFontSize(22);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(255, 255, 255);
-    doc.text(profile.name || 'Athlete', margin, 18);
-
-    doc.setFontSize(10);
-    doc.setTextColor(200, 200, 200);
-    const tierText = profile.competition_tier
-      ? `${profile.competition_tier.charAt(0).toUpperCase() + profile.competition_tier.slice(1)} Athlete`
-      : 'Athlete';
-    const weightText = profile.weight_lbs ? ` • ${profile.weight_lbs}lbs` : '';
-    doc.text(`${tierText}${weightText}`, margin, 28);
-
-    const dateStr = new Date().toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
-    doc.text(`Generated: ${dateStr}`, margin, 35);
-
-    y = 55;
-
-    // === SPORT PRIORITIES ===
-    addSubtitle('Sport Priorities');
+    // Sport Priorities
+    y = addSectionTitle('Sport Priorities', y);
     if (movementPriorities.length > 0) {
-      movementPriorities.slice(0, 10).forEach((p, i) => {
-        checkNewPage();
-        doc.setFontSize(10);
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(...darkGray);
-        doc.text(`${p.rank || i + 1}. ${p.movement_name}`, margin + 5, y);
-        y += 6;
-      });
-    } else {
-      addText('No movement assessment completed', 5);
-    }
-    addSpace(10);
+      // Two-column layout for priorities
+      const colWidth = contentWidth / 2 - 5;
+      const col1X = margin;
+      const col2X = margin + colWidth + 10;
 
-    // === STRENGTH PRIORITIES ===
-    checkNewPage();
-    addSubtitle('Strength Priorities');
+      movementPriorities.slice(0, 10).forEach((p, i) => {
+        const isCol2 = i >= 5;
+        const x = isCol2 ? col2X : col1X;
+        const itemY = y + (i % 5) * 7;
+
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(...RGB.text);
+        doc.text(`${p.rank || i + 1}. ${p.movement_name}`, x, itemY);
+      });
+      y += Math.min(movementPriorities.length, 5) * 7 + 5;
+    } else {
+      doc.setFontSize(9);
+      doc.setTextColor(...RGB.textMuted);
+      doc.text('No movement assessment completed', margin, y);
+      y += 10;
+    }
+
+    y += 5;
+
+    // Movement Heat Map
+    if (movementAssessment?.raw_data) {
+      const rawData = movementAssessment.raw_data as Record<string, unknown>;
+      const ratings: MovementRatings = {};
+
+      // Extract ratings from raw_data - they may be nested under 'ratings' or directly in raw_data
+      const ratingsData = (rawData.ratings as Record<string, number>) || rawData;
+      Object.entries(ratingsData).forEach(([key, value]) => {
+        if (typeof value === 'number' && value >= 1 && value <= 5) {
+          ratings[key] = value;
+        }
+      });
+
+      y = drawMovementHeatMap(doc, ratings, margin, y, contentWidth);
+    } else {
+      y = addSectionTitle('Movement Heat Map', y);
+      doc.setFontSize(9);
+      doc.setTextColor(...RGB.textMuted);
+      doc.text('Complete movement assessment to see heat map', margin, y);
+    }
+
+    // ========================================
+    // PAGE 2: Strength Priorities + 1RMs + Strength Bar Chart
+    // ========================================
+    doc.addPage();
+    addPageBackground(doc);
+    addHeader();
+    y = 50;
+
+    // Strength Priorities
+    y = addSectionTitle('Strength Priorities', y);
     const strengthPriorities = strengthAssessment?.strength_priorities as
       | Array<{ rank: number; lift: string; gap15?: number }>
       | undefined;
+
     if (strengthPriorities && strengthPriorities.length > 0) {
       strengthPriorities.slice(0, 5).forEach((p, i) => {
-        checkNewPage();
-        const gap = p.gap15 && p.gap15 > 0 ? ` (+${p.gap15} lb)` : '';
-        doc.setFontSize(10);
+        const gap = p.gap15 && p.gap15 > 0 ? ` (+${p.gap15} lb to elite)` : '';
+        doc.setFontSize(9);
         doc.setFont('helvetica', 'normal');
-        doc.setTextColor(...darkGray);
-        doc.text(`${p.rank || i + 1}. ${p.lift}${gap}`, margin + 5, y);
+        doc.setTextColor(...RGB.text);
+        doc.text(`${p.rank || i + 1}. ${p.lift}${gap}`, margin, y);
         y += 6;
       });
     } else {
-      addText('No strength assessment completed', 5);
+      doc.setFontSize(9);
+      doc.setTextColor(...RGB.textMuted);
+      doc.text('No strength assessment completed', margin, y);
+      y += 6;
     }
-    addSpace(10);
 
-    // === 1RM TABLE ===
-    checkNewPage();
-    addSubtitle('Current 1RMs');
+    y += 8;
+
+    // Current 1RMs Table
+    y = addSectionTitle('Current 1RMs', y);
     if (strengthAssessment) {
       const lifts: [string, number | undefined][] = [
         ['Back Squat', strengthAssessment.back_squat],
@@ -165,129 +229,296 @@ export async function GET() {
         ['Bench Press', strengthAssessment.bench_press],
       ];
 
-      lifts.forEach(([name, value]) => {
+      // Card background
+      const cardHeight = 48;
+      doc.setFillColor(...RGB.cardBg);
+      doc.roundedRect(margin, y - 2, contentWidth, cardHeight, 2, 2, 'F');
+
+      // Two-column layout
+      const col1X = margin + 5;
+      const col2X = margin + contentWidth / 2 + 5;
+      let itemY = y + 5;
+
+      lifts.forEach(([name, value], i) => {
+        const isCol2 = i >= 5;
+        const x = isCol2 ? col2X : col1X;
+        const rowY = itemY + (i % 5) * 9;
+
+        doc.setFontSize(8);
+        doc.setTextColor(...RGB.textMuted);
+        doc.text(name, x, rowY);
+
         if (value) {
-          doc.setFontSize(10);
-          doc.setTextColor(...medGray);
-          doc.text(name, margin + 5, y);
-          doc.setTextColor(...darkGray);
+          doc.setTextColor(...RGB.text);
           doc.setFont('helvetica', 'bold');
-          doc.text(`${value} lb`, margin + 50, y);
+          doc.text(`${value} lb`, x + 40, rowY);
           doc.setFont('helvetica', 'normal');
-          y += 6;
+        } else {
+          doc.setTextColor(...RGB.gray);
+          doc.text('--', x + 40, rowY);
         }
       });
+
+      y += cardHeight + 8;
     } else {
-      addText('No strength assessment completed', 5);
+      doc.setFontSize(9);
+      doc.setTextColor(...RGB.textMuted);
+      doc.text('No strength assessment completed', margin, y);
+      y += 12;
     }
-    addSpace(10);
 
-    // === ATHLETE PROFILE ===
+    // Strength Bar Chart
+    if (strengthAssessment) {
+      const gender = (profile.gender as 'male' | 'female') || 'male';
+      const lifts: Record<string, number | undefined> = {
+        back_squat: strengthAssessment.back_squat,
+        front_squat: strengthAssessment.front_squat,
+        deadlift: strengthAssessment.deadlift,
+        clean: strengthAssessment.clean,
+        clean_and_jerk: strengthAssessment.clean_and_jerk,
+        snatch: strengthAssessment.snatch,
+        strict_press: strengthAssessment.strict_press,
+        push_press: strengthAssessment.push_press,
+        bench_press: strengthAssessment.bench_press,
+      };
+
+      y = drawStrengthChart(doc, lifts, gender, margin, y, contentWidth);
+    }
+
+    // ========================================
+    // PAGE 3: Conditioning - Zone Tables + Speed Curves
+    // ========================================
+    doc.addPage();
+    addPageBackground(doc);
+    addHeader();
+    y = 50;
+
+    y = addSectionTitle('Conditioning Zones', y);
+
+    const rowZones = conditioningAssessment?.row_zones as TrainingZone[] | undefined;
+    const runZones = conditioningAssessment?.run_zones as TrainingZone[] | undefined;
+
+    // Two-column layout for zone tables
+    const tableWidth = (contentWidth - 10) / 2;
+
+    if (rowZones && rowZones.length > 0) {
+      drawZoneTable(doc, rowZones, 'Row Zones (/500m)', 'paceRange', margin, y, tableWidth);
+    } else {
+      doc.setFillColor(...RGB.cardBg);
+      doc.roundedRect(margin, y + 7, tableWidth, 50, 2, 2, 'F');
+      doc.setFontSize(8);
+      doc.setTextColor(...RGB.textMuted);
+      doc.text('Row Zones', margin, y + 7);
+      doc.text('Complete conditioning assessment', margin + 5, y + 30);
+    }
+
+    if (runZones && runZones.length > 0) {
+      drawZoneTable(doc, runZones, 'Run Zones (/mile)', 'paceRangeMile', margin + tableWidth + 10, y, tableWidth);
+    } else {
+      doc.setFillColor(...RGB.cardBg);
+      doc.roundedRect(margin + tableWidth + 10, y + 7, tableWidth, 50, 2, 2, 'F');
+      doc.setFontSize(8);
+      doc.setTextColor(...RGB.textMuted);
+      doc.text('Run Zones', margin + tableWidth + 10, y + 7);
+      doc.text('Complete conditioning assessment', margin + tableWidth + 15, y + 30);
+    }
+
+    // Calculate zone table height
+    const maxZones = Math.max(rowZones?.length || 0, runZones?.length || 0, 5);
+    y += maxZones * 12 + 25;
+
+    // Speed Curves Section
+    y = addSectionTitle('Performance Curves', y);
+
+    // Row Speed Curve
+    if (conditioningAssessment) {
+      const rowTimes: { distance: string; seconds: number; pace: number }[] = [];
+
+      if (conditioningAssessment.row_500m_time) {
+        rowTimes.push({
+          distance: '500m',
+          seconds: conditioningAssessment.row_500m_time,
+          pace: conditioningAssessment.row_500m_time / 500 * 500, // pace per 500m
+        });
+      }
+      if (conditioningAssessment.row_1000m_time) {
+        rowTimes.push({
+          distance: '1000m',
+          seconds: conditioningAssessment.row_1000m_time,
+          pace: conditioningAssessment.row_1000m_time / 1000 * 500,
+        });
+      }
+      if (conditioningAssessment.row_2000m_time) {
+        rowTimes.push({
+          distance: '2000m',
+          seconds: conditioningAssessment.row_2000m_time,
+          pace: conditioningAssessment.row_2000m_time / 2000 * 500,
+        });
+      }
+      if (conditioningAssessment.row_5000m_time) {
+        rowTimes.push({
+          distance: '5000m',
+          seconds: conditioningAssessment.row_5000m_time,
+          pace: conditioningAssessment.row_5000m_time / 5000 * 500,
+        });
+      }
+
+      if (rowTimes.length >= 2) {
+        y = drawSpeedCurve(doc, rowTimes, 'Row Pace Curve', margin, y, tableWidth, 50);
+      }
+
+      // Run Speed Curve
+      const runTimes: { distance: string; seconds: number; pace: number }[] = [];
+
+      if (conditioningAssessment.run_400m_time) {
+        runTimes.push({
+          distance: '400m',
+          seconds: conditioningAssessment.run_400m_time,
+          pace: conditioningAssessment.run_400m_time / 400 * 1609, // pace per mile
+        });
+      }
+      if (conditioningAssessment.run_mile_time) {
+        runTimes.push({
+          distance: '1 mi',
+          seconds: conditioningAssessment.run_mile_time,
+          pace: conditioningAssessment.run_mile_time,
+        });
+      }
+      if (conditioningAssessment.run_5k_time) {
+        runTimes.push({
+          distance: '5K',
+          seconds: conditioningAssessment.run_5k_time,
+          pace: conditioningAssessment.run_5k_time / 5000 * 1609,
+        });
+      }
+      if (conditioningAssessment.run_10k_time) {
+        runTimes.push({
+          distance: '10K',
+          seconds: conditioningAssessment.run_10k_time,
+          pace: conditioningAssessment.run_10k_time / 10000 * 1609,
+        });
+      }
+
+      if (runTimes.length >= 2) {
+        drawSpeedCurve(doc, runTimes, 'Run Pace Curve', margin + tableWidth + 10, y - 56, tableWidth, 50);
+      }
+    } else {
+      doc.setFontSize(9);
+      doc.setTextColor(...RGB.textMuted);
+      doc.text('Complete conditioning assessment to see performance curves', margin, y);
+    }
+
+    // ========================================
+    // PAGE 4: Athlete Profile + Goals + Habits + Mental Skills
+    // ========================================
+    doc.addPage();
+    addPageBackground(doc);
+    addHeader();
+    y = 50;
+
+    // Athlete Profile (Archetype)
     if (goalsAssessment?.athlete_type) {
-      checkNewPage();
-      addSubtitle('Athlete Profile');
+      y = addSectionTitle('Athlete Profile', y);
 
-      // Archetype box
-      doc.setFillColor(245, 245, 250);
-      doc.roundedRect(margin, y - 2, contentWidth, 25, 3, 3, 'F');
+      // Archetype card
+      doc.setFillColor(...RGB.cardBg);
+      doc.roundedRect(margin, y - 2, contentWidth, 22, 2, 2, 'F');
 
       doc.setFontSize(14);
       doc.setFont('helvetica', 'bold');
-      doc.setTextColor(...orange);
+      doc.setTextColor(...RGB.accent);
       doc.text(goalsAssessment.athlete_type, margin + 5, y + 6);
 
       if (goalsAssessment.athlete_type_description) {
-        doc.setFontSize(9);
+        doc.setFontSize(8);
         doc.setFont('helvetica', 'italic');
-        doc.setTextColor(...medGray);
+        doc.setTextColor(...RGB.textMuted);
         const descLines = doc.splitTextToSize(
           goalsAssessment.athlete_type_description,
           contentWidth - 10
         );
-        doc.text(descLines, margin + 5, y + 14);
+        doc.text(descLines.slice(0, 2), margin + 5, y + 14);
       }
-      y += 30;
-      addSpace(5);
+      y += 28;
     }
 
-    // === GOALS ===
+    // Goals Section
     if (goalsAssessment?.outcome_goals && goalsAssessment.outcome_goals.length > 0) {
-      checkNewPage();
-      addSubtitle('Goals');
+      y = addSectionTitle('Goals & Obstacles', y);
 
       goalsAssessment.outcome_goals.forEach(
         (goal: { id?: string; goal: string; date: string }, i: number) => {
-          checkNewPage();
-          doc.setFontSize(11);
+          // Goal header
+          doc.setFontSize(10);
           doc.setFont('helvetica', 'bold');
-          doc.setTextColor(...darkGray);
-          doc.text(`> ${goal.goal}`, margin + 5, y);
+          doc.setTextColor(...RGB.text);
+          const goalText = goal.goal.length > 50 ? goal.goal.substring(0, 47) + '...' : goal.goal;
+          doc.text(`> ${goalText}`, margin, y);
           y += 5;
 
-          doc.setFontSize(9);
+          doc.setFontSize(8);
           doc.setFont('helvetica', 'normal');
-          doc.setTextColor(...orange);
-          doc.text(`Target: ${goal.date}`, margin + 10, y);
-          y += 7;
+          doc.setTextColor(...RGB.accent);
+          doc.text(`Target: ${goal.date}`, margin + 5, y);
+          y += 5;
 
-          // Benchmarks - try both id-based and index-based keys
+          // Benchmarks
           const goalKey = goal.id || `goal-${i + 1}`;
           const benchmarks =
             goalsAssessment.performance_goals?.[goalKey] ||
             goalsAssessment.performance_goals?.[`goal-${i + 1}`] ||
             [];
           if (benchmarks.length > 0) {
-            doc.setTextColor(...green);
-            benchmarks.forEach((b: string) => {
-              doc.text(`+ ${b}`, margin + 10, y);
-              y += 5;
+            doc.setTextColor(...RGB.success);
+            doc.setFontSize(7);
+            benchmarks.slice(0, 3).forEach((b: string) => {
+              doc.text(`+ ${b}`, margin + 5, y);
+              y += 4;
             });
           }
 
-          // Obstacles - try both id-based and index-based keys
+          // Obstacles
           const obstacles =
             goalsAssessment.obstacles?.[goalKey] ||
             goalsAssessment.obstacles?.[`goal-${i + 1}`] ||
             [];
           if (obstacles.length > 0) {
-            doc.setTextColor(...red);
-            obstacles.forEach((o: string) => {
-              doc.text(`! ${o}`, margin + 10, y);
-              y += 5;
+            doc.setTextColor(...RGB.danger);
+            doc.setFontSize(7);
+            obstacles.slice(0, 2).forEach((o: string) => {
+              doc.text(`! ${o}`, margin + 5, y);
+              y += 4;
             });
           }
 
-          y += 5;
+          y += 4;
         }
       );
-      addSpace(5);
     }
 
-    // === PROCESS GOALS ===
+    // Process Goals (Habits)
     if (goalsAssessment?.process_goals && goalsAssessment.process_goals.length > 0) {
-      checkNewPage();
-      addSubtitle('Process Goals (Habits)');
+      y = addSectionTitle('Habits', y);
 
-      goalsAssessment.process_goals.forEach(
+      goalsAssessment.process_goals.slice(0, 4).forEach(
         (habit: { action: string; frequency: string; when: string }) => {
-          doc.setFontSize(10);
-          doc.setFont('helvetica', 'normal');
-          doc.setTextColor(...darkGray);
-          doc.text(`* ${habit.action} (${habit.frequency})`, margin + 5, y);
-          y += 5;
           doc.setFontSize(9);
-          doc.setTextColor(...medGray);
-          doc.text(`When: ${habit.when}`, margin + 10, y);
+          doc.setFont('helvetica', 'normal');
+          doc.setTextColor(...RGB.text);
+          doc.text(`* ${habit.action} (${habit.frequency})`, margin, y);
+          y += 4;
+          doc.setFontSize(7);
+          doc.setTextColor(...RGB.textMuted);
+          doc.text(`When: ${habit.when}`, margin + 5, y);
           y += 6;
         }
       );
-      addSpace(5);
+      y += 4;
     }
 
-    // === MENTAL SKILLS ===
+    // Mental Skills
     if (goalsAssessment?.mental_strengths || goalsAssessment?.development_areas) {
-      checkNewPage();
-      addSubtitle('Mental Skills');
+      y = addSectionTitle('Mental Skills', y);
 
       const formatSkill = (key: string) => {
         const names: Record<string, string> = {
@@ -302,46 +533,45 @@ export async function GET() {
         return names[key] || key;
       };
 
+      // Two column layout
+      const colWidth = contentWidth / 2 - 5;
+
       if (goalsAssessment.mental_strengths?.length > 0) {
-        doc.setFontSize(10);
+        doc.setFontSize(9);
         doc.setFont('helvetica', 'bold');
-        doc.setTextColor(...green);
-        doc.text('Strengths:', margin + 5, y);
-        y += 5;
+        doc.setTextColor(...RGB.success);
+        doc.text('Strengths', margin, y);
+        let strengthY = y + 5;
         doc.setFont('helvetica', 'normal');
-        goalsAssessment.mental_strengths.forEach((s: string) => {
-          doc.text(`+ ${formatSkill(s)}`, margin + 10, y);
-          y += 5;
+        doc.setFontSize(8);
+        goalsAssessment.mental_strengths.slice(0, 4).forEach((s: string) => {
+          doc.text(`+ ${formatSkill(s)}`, margin, strengthY);
+          strengthY += 5;
         });
-        y += 3;
       }
 
       if (goalsAssessment.development_areas?.length > 0) {
-        doc.setFontSize(10);
+        doc.setFontSize(9);
         doc.setFont('helvetica', 'bold');
-        doc.setTextColor(...red);
-        doc.text('Development Areas:', margin + 5, y);
-        y += 5;
+        doc.setTextColor(...RGB.warning);
+        doc.text('Development Areas', margin + colWidth + 10, y);
+        let devY = y + 5;
         doc.setFont('helvetica', 'normal');
-        goalsAssessment.development_areas.forEach((s: string) => {
-          doc.text(`! ${formatSkill(s)}`, margin + 10, y);
-          y += 5;
+        doc.setFontSize(8);
+        goalsAssessment.development_areas.slice(0, 4).forEach((s: string) => {
+          doc.text(`! ${formatSkill(s)}`, margin + colWidth + 10, devY);
+          devY += 5;
         });
       }
     }
 
-    // === FOOTER ===
+    // ========================================
+    // Add footers to all pages
+    // ========================================
     const totalPages = doc.internal.pages.length - 1;
     for (let i = 1; i <= totalPages; i++) {
       doc.setPage(i);
-      doc.setFontSize(8);
-      doc.setTextColor(...medGray);
-      doc.text(
-        `Ruth Performance Lab • ${profile.email} • Page ${i} of ${totalPages}`,
-        pageWidth / 2,
-        290,
-        { align: 'center' }
-      );
+      addFooter(i, totalPages);
     }
 
     // Return PDF as buffer
