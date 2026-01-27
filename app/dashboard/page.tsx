@@ -7,6 +7,7 @@ import { getLatestStrengthAssessment } from '@/lib/assessments/strength';
 import { getLatestGoalsAssessment } from '@/lib/assessments/goals';
 import Navbar from '@/components/Navbar';
 import ModuleCard from '@/components/ModuleCard';
+import ExportPdfButton from '@/components/ExportPdfButton';
 import {
   Move,
   Dumbbell,
@@ -108,12 +109,17 @@ export default async function DashboardPage() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Welcome Section */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white mb-2">
-            Welcome back, <span className="text-gradient">{athlete?.name || user.name || 'Athlete'}</span>
-          </h1>
-          <p className="text-gray-400">
-            Complete your assessments to get a comprehensive view of your athletic profile.
-          </p>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h1 className="text-3xl font-bold text-white mb-2">
+                Welcome back, <span className="text-gradient">{athlete?.name || user.name || 'Athlete'}</span>
+              </h1>
+              <p className="text-gray-400">
+                Complete your assessments to get a comprehensive view of your athletic profile.
+              </p>
+            </div>
+            <ExportPdfButton />
+          </div>
         </div>
 
         {/* Quick Stats */}
