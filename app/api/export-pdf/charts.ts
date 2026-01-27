@@ -20,21 +20,37 @@ export const RGB = {
   textMuted: [148, 163, 184] as [number, number, number],
   accent: [249, 115, 22] as [number, number, number],
   success: [34, 197, 94] as [number, number, number],
-  warning: [234, 179, 8] as [number, number, number],
+  warning: [250, 204, 21] as [number, number, number],  // Brighter yellow for visibility
   danger: [239, 68, 68] as [number, number, number],
   lime: [132, 204, 22] as [number, number, number],
   gray: [71, 85, 105] as [number, number, number],
+  eliteGray: [150, 150, 150] as [number, number, number],
 };
 
-// Rating color scale
+// Rating color scale - explicit RGB values for heat map visibility
 export const RATING_COLORS: Record<number, [number, number, number]> = {
-  5: RGB.success,
-  4: RGB.lime,
-  3: RGB.warning,
-  2: RGB.accent,
-  1: RGB.danger,
-  0: RGB.gray,
+  5: [34, 197, 94],    // Green - Expert
+  4: [132, 204, 22],   // Lime - Proficient
+  3: [250, 204, 21],   // Yellow - Competent
+  2: [249, 115, 22],   // Orange - Developing
+  1: [239, 68, 68],    // Red - Novice
+  0: [71, 85, 105],    // Gray - No rating
 };
+
+// Elite pace benchmarks (seconds per 500m for row, seconds per mile for run)
+export const ELITE_ROW_PACES = [
+  { distance: '500m', meters: 500, pace: 85 },    // 1:25/500m
+  { distance: '1000m', meters: 1000, pace: 95 },  // 1:35/500m
+  { distance: '2000m', meters: 2000, pace: 105 }, // 1:45/500m
+  { distance: '5000m', meters: 5000, pace: 115 }, // 1:55/500m
+];
+
+export const ELITE_RUN_PACES = [
+  { distance: '400m', meters: 400, pace: 270 },   // ~4:30/mile pace
+  { distance: '1 mi', meters: 1609, pace: 300 },  // 5:00/mile
+  { distance: '5K', meters: 5000, pace: 330 },    // 5:30/mile
+  { distance: '10K', meters: 10000, pace: 360 },  // 6:00/mile
+];
 
 // Movement categories for heat map
 export const MOVEMENT_CATEGORIES: Record<string, string[]> = {
@@ -108,6 +124,20 @@ export function addPageBackground(doc: jsPDF) {
 }
 
 /**
+ * Get rating color with explicit RGB values
+ */
+function getRatingColor(rating: number): [number, number, number] {
+  switch (rating) {
+    case 5: return [34, 197, 94];    // Green - Expert
+    case 4: return [132, 204, 22];   // Lime - Proficient
+    case 3: return [250, 204, 21];   // Yellow - Competent
+    case 2: return [249, 115, 22];   // Orange - Developing
+    case 1: return [239, 68, 68];    // Red - Novice
+    default: return [71, 85, 105];   // Gray - No rating
+  }
+}
+
+/**
  * Draw Movement Heat Map using jsPDF primitives
  */
 export function drawMovementHeatMap(
@@ -125,7 +155,7 @@ export function drawMovementHeatMap(
   // Section title
   doc.setFontSize(11);
   doc.setFont('helvetica', 'bold');
-  doc.setTextColor(...RGB.accent);
+  doc.setTextColor(249, 115, 22); // Orange accent
   doc.text('Movement Confidence Heat Map', startX, currentY);
   currentY += 8;
 
@@ -133,7 +163,7 @@ export function drawMovementHeatMap(
     // Category header
     doc.setFontSize(8);
     doc.setFont('helvetica', 'bold');
-    doc.setTextColor(...RGB.textMuted);
+    doc.setTextColor(148, 163, 184); // Muted text
     doc.text(category.toUpperCase(), startX, currentY);
     currentY += 4;
 
@@ -145,15 +175,19 @@ export function drawMovementHeatMap(
       const y = currentY + row * cellHeight;
 
       const rating = ratings[movement] || 0;
-      const bgColor = RATING_COLORS[rating] || RGB.gray;
+      const [r, g, b] = getRatingColor(rating);
 
-      // Cell background
-      doc.setFillColor(...bgColor);
-      doc.roundedRect(x, y, cellWidth - 1, cellHeight - 1, 1, 1, 'F');
+      // Cell background - explicitly set fill color before each rect
+      doc.setFillColor(r, g, b);
+      doc.rect(x, y, cellWidth - 1, cellHeight - 1, 'F');
 
       // Movement name (truncate if needed)
-      const textColor = rating >= 3 && rating <= 5 ? RGB.background : RGB.text;
-      doc.setTextColor(...textColor);
+      // Use dark text on bright backgrounds (ratings 3-5), white on dark (1-2, 0)
+      if (rating >= 3 && rating <= 5) {
+        doc.setTextColor(30, 41, 59); // Dark text
+      } else {
+        doc.setTextColor(248, 250, 252); // White text
+      }
       doc.setFontSize(5.5);
       doc.setFont('helvetica', 'normal');
       const displayName = movement.length > 12 ? movement.substring(0, 11) + '..' : movement;
@@ -167,7 +201,7 @@ export function drawMovementHeatMap(
   // Legend
   currentY += 2;
   doc.setFontSize(6);
-  doc.setTextColor(...RGB.textMuted);
+  doc.setTextColor(148, 163, 184); // Muted text
   const legendItems = [
     { rating: 5, label: '5-Expert' },
     { rating: 4, label: '4-Proficient' },
@@ -178,8 +212,10 @@ export function drawMovementHeatMap(
 
   let legendX = startX;
   legendItems.forEach(({ rating, label }) => {
-    doc.setFillColor(...RATING_COLORS[rating]);
+    const [r, g, b] = getRatingColor(rating);
+    doc.setFillColor(r, g, b);
     doc.rect(legendX, currentY - 2, 4, 4, 'F');
+    doc.setTextColor(148, 163, 184);
     doc.text(label, legendX + 5, currentY + 1);
     legendX += 28;
   });
@@ -333,12 +369,19 @@ export function drawZoneTable(
   return y + cardHeight + 4;
 }
 
+export interface SpeedCurveData {
+  distance: string;
+  seconds: number;
+  pace: number;
+}
+
 /**
- * Draw Speed Curve using jsPDF primitives
+ * Draw Speed Curve using jsPDF primitives with elite reference line
  */
 export function drawSpeedCurve(
   doc: jsPDF,
-  times: { distance: string; seconds: number; pace: number }[],
+  athleteTimes: SpeedCurveData[],
+  eliteTimes: SpeedCurveData[],
   title: string,
   startX: number,
   startY: number,
@@ -350,71 +393,136 @@ export function drawSpeedCurve(
   // Title
   doc.setFontSize(10);
   doc.setFont('helvetica', 'bold');
-  doc.setTextColor(...RGB.accent);
+  doc.setTextColor(249, 115, 22); // Orange accent
   doc.text(title, startX, y);
   y += 6;
 
-  // Chart background
-  doc.setFillColor(...RGB.cardBg);
+  // Chart background card
+  doc.setFillColor(51, 65, 85); // Card background
   doc.roundedRect(startX, y, width, height, 2, 2, 'F');
 
-  if (times.length < 2) {
+  const hasAthleteData = athleteTimes.length >= 2;
+  const hasEliteData = eliteTimes.length >= 2;
+
+  if (!hasAthleteData && !hasEliteData) {
     doc.setFontSize(8);
-    doc.setTextColor(...RGB.textMuted);
-    doc.text('Insufficient data for curve', startX + 10, y + height / 2);
+    doc.setTextColor(148, 163, 184);
+    doc.text('Insufficient data', startX + 10, y + height / 2);
     return y + height + 4;
   }
 
   // Calculate chart dimensions
-  const chartPadding = 8;
-  const chartX = startX + chartPadding + 15;
+  const chartPadding = 6;
+  const chartX = startX + chartPadding + 10;
   const chartY = y + chartPadding;
-  const chartWidth = width - chartPadding * 2 - 20;
-  const chartHeight = height - chartPadding * 2 - 10;
+  const chartWidth = width - chartPadding * 2 - 15;
+  const chartHeight = height - chartPadding * 2 - 14;
 
-  // Find min/max for scaling
-  const maxTime = Math.max(...times.map(t => t.seconds));
-  const minPace = Math.min(...times.map(t => t.pace));
-  const maxPace = Math.max(...times.map(t => t.pace));
+  // Combine all times to find scaling bounds
+  const allTimes = [...athleteTimes, ...eliteTimes];
+  const maxSeconds = Math.max(...allTimes.map(t => t.seconds));
+  const allPaces = allTimes.map(t => t.pace);
+  const minPace = Math.min(...allPaces) * 0.9;
+  const maxPace = Math.max(...allPaces) * 1.1;
   const paceRange = maxPace - minPace || 1;
 
   // Draw axes
-  doc.setDrawColor(...RGB.textMuted);
-  doc.setLineWidth(0.3);
+  doc.setDrawColor(100, 116, 139);
+  doc.setLineWidth(0.2);
   doc.line(chartX, chartY + chartHeight, chartX + chartWidth, chartY + chartHeight); // X-axis
   doc.line(chartX, chartY, chartX, chartY + chartHeight); // Y-axis
 
-  // Y-axis label
-  doc.setFontSize(6);
-  doc.setTextColor(...RGB.textMuted);
-  doc.text('Pace', startX + 2, chartY + chartHeight / 2, { angle: 90 });
-
-  // Plot points and connect with lines
-  doc.setDrawColor(...RGB.accent);
-  doc.setLineWidth(1);
-
-  const points = times.map((t, i) => ({
-    x: chartX + (t.seconds / maxTime) * chartWidth,
-    y: chartY + chartHeight - ((t.pace - minPace) / paceRange) * chartHeight * 0.8 - chartHeight * 0.1,
+  // Helper to calculate point position
+  const getPoint = (t: SpeedCurveData) => ({
+    x: chartX + (t.seconds / maxSeconds) * chartWidth,
+    y: chartY + chartHeight - ((t.pace - minPace) / paceRange) * chartHeight,
     label: t.distance,
     pace: t.pace,
-    seconds: t.seconds
-  }));
+  });
 
-  // Draw line connecting points
-  for (let i = 0; i < points.length - 1; i++) {
-    doc.line(points[i].x, points[i].y, points[i + 1].x, points[i + 1].y);
+  // Draw elite reference line (dashed gray)
+  if (hasEliteData) {
+    const elitePoints = eliteTimes.map(getPoint);
+
+    doc.setDrawColor(150, 150, 150); // Gray
+    doc.setLineWidth(0.4);
+
+    // Draw dashed line manually (jsPDF doesn't support native dash)
+    for (let i = 0; i < elitePoints.length - 1; i++) {
+      const p1 = elitePoints[i];
+      const p2 = elitePoints[i + 1];
+      const dx = p2.x - p1.x;
+      const dy = p2.y - p1.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const dashLen = 2;
+      const gapLen = 2;
+      const numDashes = Math.floor(dist / (dashLen + gapLen));
+
+      for (let j = 0; j < numDashes; j++) {
+        const startRatio = j * (dashLen + gapLen) / dist;
+        const endRatio = (j * (dashLen + gapLen) + dashLen) / dist;
+        doc.line(
+          p1.x + dx * startRatio,
+          p1.y + dy * startRatio,
+          p1.x + dx * Math.min(endRatio, 1),
+          p1.y + dy * Math.min(endRatio, 1)
+        );
+      }
+    }
+
+    // Elite points (small hollow circles)
+    elitePoints.forEach((pt) => {
+      doc.setDrawColor(150, 150, 150);
+      doc.setLineWidth(0.3);
+      doc.circle(pt.x, pt.y, 1.2, 'S');
+    });
   }
 
-  // Draw points and labels
-  points.forEach((pt) => {
-    doc.setFillColor(...RGB.accent);
-    doc.circle(pt.x, pt.y, 2, 'F');
+  // Draw athlete line (solid orange)
+  if (hasAthleteData) {
+    const athletePoints = athleteTimes.map(getPoint);
 
+    doc.setDrawColor(249, 115, 22); // Orange
+    doc.setLineWidth(0.5);
+
+    // Draw solid line
+    for (let i = 0; i < athletePoints.length - 1; i++) {
+      doc.line(athletePoints[i].x, athletePoints[i].y, athletePoints[i + 1].x, athletePoints[i + 1].y);
+    }
+
+    // Athlete points (filled orange circles)
+    athletePoints.forEach((pt) => {
+      doc.setFillColor(249, 115, 22);
+      doc.circle(pt.x, pt.y, 1.5, 'F');
+    });
+
+    // Distance labels along x-axis
     doc.setFontSize(5);
-    doc.setTextColor(...RGB.text);
-    doc.text(pt.label, pt.x - 3, chartY + chartHeight + 5);
-  });
+    doc.setTextColor(248, 250, 252);
+    athletePoints.forEach((pt) => {
+      doc.text(pt.label, pt.x - 4, chartY + chartHeight + 4);
+    });
+  }
+
+  // Legend at bottom
+  const legendY = y + height - 4;
+  doc.setFontSize(5);
+
+  // Athlete legend
+  doc.setDrawColor(249, 115, 22);
+  doc.setLineWidth(0.5);
+  doc.line(startX + 5, legendY, startX + 12, legendY);
+  doc.setTextColor(248, 250, 252);
+  doc.text('Athlete', startX + 14, legendY + 1);
+
+  // Elite legend
+  doc.setDrawColor(150, 150, 150);
+  doc.setLineWidth(0.4);
+  // Dashed line for legend
+  doc.line(startX + 35, legendY, startX + 37, legendY);
+  doc.line(startX + 39, legendY, startX + 41, legendY);
+  doc.setTextColor(150, 150, 150);
+  doc.text('Elite', startX + 43, legendY + 1);
 
   return y + height + 6;
 }

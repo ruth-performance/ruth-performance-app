@@ -13,6 +13,9 @@ import {
   drawZoneTable,
   drawSpeedCurve,
   MovementRatings,
+  SpeedCurveData,
+  ELITE_ROW_PACES,
+  ELITE_RUN_PACES,
 } from './charts';
 
 export const dynamic = 'force-dynamic';
@@ -330,10 +333,9 @@ export async function GET() {
     // Speed Curves Section
     y = addSectionTitle('Performance Curves', y);
 
-    // Row Speed Curve
+    // Build athlete row times from conditioning assessment
+    const rowTimes: SpeedCurveData[] = [];
     if (conditioningAssessment) {
-      const rowTimes: { distance: string; seconds: number; pace: number }[] = [];
-
       if (conditioningAssessment.row_500m_time) {
         rowTimes.push({
           distance: '500m',
@@ -362,14 +364,18 @@ export async function GET() {
           pace: conditioningAssessment.row_5000m_time / 5000 * 500,
         });
       }
+    }
 
-      if (rowTimes.length >= 2) {
-        y = drawSpeedCurve(doc, rowTimes, 'Row Pace Curve', margin, y, tableWidth, 50);
-      }
+    // Build elite row reference data (convert to same format)
+    const eliteRowTimes: SpeedCurveData[] = ELITE_ROW_PACES.map(p => ({
+      distance: p.distance,
+      seconds: p.pace * (p.meters / 500), // total seconds based on pace per 500m
+      pace: p.pace,
+    }));
 
-      // Run Speed Curve
-      const runTimes: { distance: string; seconds: number; pace: number }[] = [];
-
+    // Build athlete run times from conditioning assessment
+    const runTimes: SpeedCurveData[] = [];
+    if (conditioningAssessment) {
       if (conditioningAssessment.run_400m_time) {
         runTimes.push({
           distance: '400m',
@@ -398,15 +404,45 @@ export async function GET() {
           pace: conditioningAssessment.run_10k_time / 10000 * 1609,
         });
       }
-
-      if (runTimes.length >= 2) {
-        drawSpeedCurve(doc, runTimes, 'Run Pace Curve', margin + tableWidth + 10, y - 56, tableWidth, 50);
-      }
-    } else {
-      doc.setFontSize(9);
-      doc.setTextColor(...RGB.textMuted);
-      doc.text('Complete conditioning assessment to see performance curves', margin, y);
     }
+
+    // Build elite run reference data
+    const eliteRunTimes: SpeedCurveData[] = ELITE_RUN_PACES.map(p => ({
+      distance: p.distance,
+      seconds: p.pace * (p.meters / 1609), // total seconds based on pace per mile
+      pace: p.pace,
+    }));
+
+    // Draw curves side by side with proper alignment
+    const curveWidth = tableWidth;
+    const curveHeight = 55;
+    const curveStartY = y;
+
+    // Row Speed Curve (left)
+    if (rowTimes.length >= 2 || eliteRowTimes.length >= 2) {
+      drawSpeedCurve(doc, rowTimes, eliteRowTimes, 'Row Pace Curve', margin, curveStartY, curveWidth, curveHeight);
+    } else {
+      doc.setFillColor(51, 65, 85);
+      doc.roundedRect(margin, curveStartY + 6, curveWidth, curveHeight, 2, 2, 'F');
+      doc.setFontSize(8);
+      doc.setTextColor(148, 163, 184);
+      doc.text('Row Pace Curve', margin, curveStartY);
+      doc.text('No row data available', margin + 10, curveStartY + curveHeight / 2);
+    }
+
+    // Run Speed Curve (right)
+    if (runTimes.length >= 2 || eliteRunTimes.length >= 2) {
+      drawSpeedCurve(doc, runTimes, eliteRunTimes, 'Run Pace Curve', margin + tableWidth + 10, curveStartY, curveWidth, curveHeight);
+    } else {
+      doc.setFillColor(51, 65, 85);
+      doc.roundedRect(margin + tableWidth + 10, curveStartY + 6, curveWidth, curveHeight, 2, 2, 'F');
+      doc.setFontSize(8);
+      doc.setTextColor(148, 163, 184);
+      doc.text('Run Pace Curve', margin + tableWidth + 10, curveStartY);
+      doc.text('No run data available', margin + tableWidth + 20, curveStartY + curveHeight / 2);
+    }
+
+    y = curveStartY + curveHeight + 12;
 
     // ========================================
     // PAGE 4: Athlete Profile + Goals + Habits + Mental Skills
