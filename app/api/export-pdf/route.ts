@@ -12,8 +12,10 @@ import {
   drawStrengthChart,
   drawZoneTable,
   drawSpeedCurve,
+  drawMentalSkillsSpider,
   MovementRatings,
   SpeedCurveData,
+  MentalSkillScore,
   ELITE_ROW_PACES,
   ELITE_RUN_PACES,
 } from './charts';
@@ -308,7 +310,7 @@ export async function GET() {
     addHeader();
     y = 50;
 
-    y = addSectionTitle('Conditioning Zones', y);
+    y = addSectionTitle('Conditioning Pace Zones', y);
 
     const rowZones = conditioningAssessment?.row_zones as TrainingZone[] | undefined;
     const runZones = conditioningAssessment?.run_zones as TrainingZone[] | undefined;
@@ -564,8 +566,8 @@ export async function GET() {
       y += 4;
     }
 
-    // Mental Skills
-    if (goalsAssessment?.mental_strengths || goalsAssessment?.development_areas) {
+    // Mental Skills with Spider Chart
+    if (goalsAssessment?.mental_strengths || goalsAssessment?.development_areas || goalsAssessment?.mental_skill_ratings) {
       y = addSectionTitle('Mental Skills', y);
 
       const formatSkill = (key: string) => {
@@ -581,36 +583,75 @@ export async function GET() {
         return names[key] || key;
       };
 
-      // Two column layout
-      const colWidth = contentWidth / 2 - 5;
+      // Build mental skills data for spider chart
+      const mentalSkillsData: MentalSkillScore[] = [];
+      const skillRatings = goalsAssessment?.mental_skill_ratings as Record<string, number> | undefined;
+
+      // Default mental skill categories
+      const skillKeys = ['coping', 'peaking', 'goalSetting', 'concentration', 'confidence', 'coachability', 'freedomFromWorry'];
+
+      if (skillRatings && Object.keys(skillRatings).length > 0) {
+        // Use actual scores from assessment
+        skillKeys.forEach((key) => {
+          mentalSkillsData.push({
+            name: key,
+            score: skillRatings[key] || 3,
+          });
+        });
+      } else {
+        // Infer scores from strengths/development areas
+        skillKeys.forEach((key) => {
+          let score = 3; // Default
+          if (goalsAssessment.mental_strengths?.includes(key)) score = 5;
+          else if (goalsAssessment.development_areas?.includes(key)) score = 2;
+          mentalSkillsData.push({ name: key, score });
+        });
+      }
+
+      // Layout: Spider chart on left, lists on right
+      const chartRadius = 28;
+      const chartCenterX = margin + chartRadius + 10;
+      const chartCenterY = y + chartRadius + 5;
+
+      // Draw spider chart
+      if (mentalSkillsData.length > 0) {
+        drawMentalSkillsSpider(doc, mentalSkillsData, chartCenterX, chartCenterY, chartRadius);
+      }
+
+      // Draw strengths/development areas on the right
+      const listStartX = margin + chartRadius * 2 + 30;
+      const listY = y;
 
       if (goalsAssessment.mental_strengths?.length > 0) {
         doc.setFontSize(9);
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(...RGB.success);
-        doc.text('Strengths', margin, y);
-        let strengthY = y + 5;
+        doc.text('Strengths', listStartX, listY);
+        let strengthY = listY + 5;
         doc.setFont('helvetica', 'normal');
-        doc.setFontSize(8);
+        doc.setFontSize(7);
         goalsAssessment.mental_strengths.slice(0, 4).forEach((s: string) => {
-          doc.text(`+ ${formatSkill(s)}`, margin, strengthY);
-          strengthY += 5;
+          doc.text(`+ ${formatSkill(s)}`, listStartX, strengthY);
+          strengthY += 4;
         });
       }
 
       if (goalsAssessment.development_areas?.length > 0) {
+        const devStartY = listY + (goalsAssessment.mental_strengths?.length > 0 ? 25 : 0);
         doc.setFontSize(9);
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(...RGB.warning);
-        doc.text('Development Areas', margin + colWidth + 10, y);
-        let devY = y + 5;
+        doc.text('Development Areas', listStartX, devStartY);
+        let devY = devStartY + 5;
         doc.setFont('helvetica', 'normal');
-        doc.setFontSize(8);
+        doc.setFontSize(7);
         goalsAssessment.development_areas.slice(0, 4).forEach((s: string) => {
-          doc.text(`! ${formatSkill(s)}`, margin + colWidth + 10, devY);
-          devY += 5;
+          doc.text(`! ${formatSkill(s)}`, listStartX, devY);
+          devY += 4;
         });
       }
+
+      y += chartRadius * 2 + 15;
     }
 
     // ========================================

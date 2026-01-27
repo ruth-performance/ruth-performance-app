@@ -393,8 +393,19 @@ export function drawZoneTable(
     const zoneName = zone.name.length > 12 ? zone.name.substring(0, 11) + '.' : zone.name;
     doc.text(zoneName, startX + 24, rowY);
 
-    // Pace
-    const pace = zone[paceField] || '--';
+    // Pace - sanitize any encoding issues with < and > symbols
+    let pace = zone[paceField] || '--';
+    if (typeof pace === 'string') {
+      pace = pace
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&#60;/g, '<')
+        .replace(/&#62;/g, '>')
+        .replace(/\u201c/g, '<')  // Left double quote used erroneously
+        .replace(/\u201d/g, '>')  // Right double quote used erroneously
+        .replace(/"d\s*/g, '< ')  // Fix "d pattern
+        .replace(/"D\s*/g, '< '); // Fix "D pattern
+    }
     doc.setTextColor(...RGB.text);
     doc.text(pace, startX + width - 30, rowY);
   });
@@ -407,6 +418,21 @@ export interface SpeedCurveData {
   seconds: number;
   pace: number;
 }
+
+// Distance X-positions for consistent alignment (proportional spacing)
+const ROW_DISTANCE_POSITIONS: Record<string, number> = {
+  '500m': 0.1,
+  '1000m': 0.35,
+  '2000m': 0.65,
+  '5000m': 0.95,
+};
+
+const RUN_DISTANCE_POSITIONS: Record<string, number> = {
+  '400m': 0.1,
+  '1 mi': 0.35,
+  '5K': 0.65,
+  '10K': 0.95,
+};
 
 /**
  * Draw Speed Curve using jsPDF primitives with elite reference line
@@ -422,6 +448,10 @@ export function drawSpeedCurve(
   height: number
 ): number {
   let y = startY;
+
+  // Determine if this is row or run based on title
+  const isRow = title.toLowerCase().includes('row');
+  const distancePositions = isRow ? ROW_DISTANCE_POSITIONS : RUN_DISTANCE_POSITIONS;
 
   // Title
   doc.setFontSize(10);
@@ -451,9 +481,8 @@ export function drawSpeedCurve(
   const chartWidth = width - chartPadding * 2 - 15;
   const chartHeight = height - chartPadding * 2 - 14;
 
-  // Combine all times to find scaling bounds
+  // Combine all times to find Y-axis scaling bounds (pace)
   const allTimes = [...athleteTimes, ...eliteTimes];
-  const maxSeconds = Math.max(...allTimes.map(t => t.seconds));
   const allPaces = allTimes.map(t => t.pace);
   const minPace = Math.min(...allPaces) * 0.9;
   const maxPace = Math.max(...allPaces) * 1.1;
@@ -465,13 +494,17 @@ export function drawSpeedCurve(
   doc.line(chartX, chartY + chartHeight, chartX + chartWidth, chartY + chartHeight); // X-axis
   doc.line(chartX, chartY, chartX, chartY + chartHeight); // Y-axis
 
-  // Helper to calculate point position
-  const getPoint = (t: SpeedCurveData) => ({
-    x: chartX + (t.seconds / maxSeconds) * chartWidth,
-    y: chartY + chartHeight - ((t.pace - minPace) / paceRange) * chartHeight,
-    label: t.distance,
-    pace: t.pace,
-  });
+  // Helper to calculate point position using distance-based X positioning
+  const getPoint = (t: SpeedCurveData) => {
+    // Get X position from distance lookup, fallback to proportional if not found
+    const xPos = distancePositions[t.distance] ?? 0.5;
+    return {
+      x: chartX + xPos * chartWidth,
+      y: chartY + chartHeight - ((t.pace - minPace) / paceRange) * chartHeight,
+      label: t.distance,
+      pace: t.pace,
+    };
+  };
 
   // Draw elite reference line (dashed gray)
   if (hasEliteData) {
@@ -558,4 +591,136 @@ export function drawSpeedCurve(
   doc.text('Elite', startX + 43, legendY + 1);
 
   return y + height + 6;
+}
+
+export interface MentalSkillScore {
+  name: string;
+  score: number;
+}
+
+// Mental skill display names
+const MENTAL_SKILL_LABELS: Record<string, string> = {
+  coping: 'Coping',
+  peaking: 'Peaking',
+  goalSetting: 'Goals',
+  concentration: 'Focus',
+  confidence: 'Confidence',
+  coachability: 'Coachable',
+  freedomFromWorry: 'Calm',
+};
+
+/**
+ * Draw Mental Skills Spider/Radar Chart
+ */
+export function drawMentalSkillsSpider(
+  doc: jsPDF,
+  skills: MentalSkillScore[],
+  centerX: number,
+  centerY: number,
+  radius: number
+): void {
+  if (skills.length === 0) return;
+
+  const numSkills = skills.length;
+  const angleStep = (2 * Math.PI) / numSkills;
+
+  // Draw background web (concentric polygons for scale 1-5)
+  for (let level = 1; level <= 5; level++) {
+    const levelRadius = (level / 5) * radius;
+    doc.setDrawColor(71, 85, 105); // #475569
+    doc.setLineWidth(0.2);
+
+    // Draw polygon edges
+    for (let i = 0; i < numSkills; i++) {
+      const angle = i * angleStep - Math.PI / 2; // Start from top
+      const nextAngle = ((i + 1) % numSkills) * angleStep - Math.PI / 2;
+
+      const x1 = centerX + levelRadius * Math.cos(angle);
+      const y1 = centerY + levelRadius * Math.sin(angle);
+      const x2 = centerX + levelRadius * Math.cos(nextAngle);
+      const y2 = centerY + levelRadius * Math.sin(nextAngle);
+
+      doc.line(x1, y1, x2, y2);
+    }
+  }
+
+  // Draw axis lines (spokes)
+  skills.forEach((_, i) => {
+    const angle = i * angleStep - Math.PI / 2;
+    const endX = centerX + radius * Math.cos(angle);
+    const endY = centerY + radius * Math.sin(angle);
+    doc.setDrawColor(71, 85, 105);
+    doc.setLineWidth(0.2);
+    doc.line(centerX, centerY, endX, endY);
+  });
+
+  // Build path for athlete's scores
+  const points: { x: number; y: number }[] = [];
+  skills.forEach((skill, i) => {
+    const angle = i * angleStep - Math.PI / 2;
+    const scoreRadius = (skill.score / 5) * radius;
+    points.push({
+      x: centerX + scoreRadius * Math.cos(angle),
+      y: centerY + scoreRadius * Math.sin(angle),
+    });
+  });
+
+  // Draw filled polygon (orange with lighter fill effect via multiple lines)
+  doc.setDrawColor(249, 115, 22); // Orange
+  doc.setLineWidth(1.5);
+
+  // Draw outline
+  for (let i = 0; i < points.length; i++) {
+    const next = (i + 1) % points.length;
+    doc.line(points[i].x, points[i].y, points[next].x, points[next].y);
+  }
+
+  // Draw filled area using triangles from center (simulated fill)
+  doc.setFillColor(249, 115, 22);
+  for (let i = 0; i < points.length; i++) {
+    const next = (i + 1) % points.length;
+    // Draw small filled circles along the edge for visual effect
+    const midX = (points[i].x + points[next].x) / 2;
+    const midY = (points[i].y + points[next].y) / 2;
+    doc.circle(midX, midY, 0.5, 'F');
+  }
+
+  // Draw data points (larger circles)
+  points.forEach((point) => {
+    doc.setFillColor(249, 115, 22);
+    doc.circle(point.x, point.y, 2, 'F');
+  });
+
+  // Draw labels outside the chart
+  doc.setFontSize(6);
+  skills.forEach((skill, i) => {
+    const angle = i * angleStep - Math.PI / 2;
+    const labelRadius = radius + 8;
+    const labelX = centerX + labelRadius * Math.cos(angle);
+    const labelY = centerY + labelRadius * Math.sin(angle);
+
+    // Get display name
+    const displayName = MENTAL_SKILL_LABELS[skill.name] || skill.name;
+
+    // Determine text alignment based on position
+    let align: 'left' | 'center' | 'right' = 'center';
+    if (Math.cos(angle) > 0.3) align = 'left';
+    else if (Math.cos(angle) < -0.3) align = 'right';
+
+    // Adjust Y for top/bottom labels
+    const yOffset = Math.sin(angle) > 0.3 ? 2 : (Math.sin(angle) < -0.3 ? -1 : 0);
+
+    doc.setTextColor(148, 163, 184); // Muted text
+    doc.text(displayName, labelX, labelY + yOffset, { align });
+  });
+
+  // Draw score value inside each point
+  doc.setFontSize(5);
+  doc.setTextColor(30, 41, 59); // Dark text
+  points.forEach((point, i) => {
+    const score = skills[i].score;
+    if (score >= 3) {
+      doc.text(score.toString(), point.x - 1, point.y + 1);
+    }
+  });
 }
