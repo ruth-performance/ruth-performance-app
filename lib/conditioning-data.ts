@@ -346,12 +346,47 @@ export function analyzeConditioning(
   const rowCPPace = rowCP ? 500 / rowCP : null;
   const rowCPWatts = paceToWatts(rowCPPace);
 
-  // Row Training Zones
+  // Estimate missing row paces for zone calculation
+  // Use retention factors from benchmarks: 500m pace × retention = longer pace
+  // Retention factors: 2000m ~0.85-0.88, 5000m ~0.78-0.81
+  let estimatedRowPaces = { ...rowPaces };
+
+  // If we have 2000m pace, we can estimate others
+  if (rowPaces[2000]) {
+    if (!rowPaces[500]) {
+      // 500m pace ≈ 2000m pace × retention (faster)
+      estimatedRowPaces[500] = rowPaces[2000] * bm.row.retention[2000];
+    }
+    if (!rowPaces[5000]) {
+      // 5000m pace ≈ 2000m pace / (5000m retention / 2000m retention)
+      estimatedRowPaces[5000] = rowPaces[2000] * (bm.row.retention[2000] / bm.row.retention[5000]);
+    }
+  }
+  // If we only have 5000m pace
+  else if (rowPaces[5000]) {
+    if (!rowPaces[500]) {
+      estimatedRowPaces[500] = rowPaces[5000] * bm.row.retention[5000];
+    }
+    if (!rowPaces[2000]) {
+      estimatedRowPaces[2000] = rowPaces[5000] * (bm.row.retention[5000] / bm.row.retention[2000]);
+    }
+  }
+  // If we only have 500m pace
+  else if (rowPaces[500]) {
+    if (!rowPaces[2000]) {
+      estimatedRowPaces[2000] = rowPaces[500] / bm.row.retention[2000];
+    }
+    if (!rowPaces[5000]) {
+      estimatedRowPaces[5000] = rowPaces[500] / bm.row.retention[5000];
+    }
+  }
+
+  // Row Training Zones - use estimated paces if available
   let rowZones: Zone[] = [];
-  if (rowPaces[500] && rowPaces[2000] && rowPaces[5000]) {
-    const p500 = rowPaces[500];
-    const p2k = rowPaces[2000];
-    const p5k = rowPaces[5000];
+  if (estimatedRowPaces[500] && estimatedRowPaces[2000] && estimatedRowPaces[5000]) {
+    const p500 = estimatedRowPaces[500];
+    const p2k = estimatedRowPaces[2000];
+    const p5k = estimatedRowPaces[5000];
 
     rowZones = [
       { zone: 7, name: 'Anaerobic Power', description: 'Neuromuscular power, maximal speed', color: ZONE_COLORS.z7, paceRange: `≤ ${formatTime(p500 + 3)}`, calHrRange: `≥ ${paceToCalHr(p500 + 3)}` },
@@ -382,12 +417,49 @@ export function analyzeConditioning(
   const runCV = calculateCP(runTimes.mile, 1609.34, runTimes['10k'], 10000);
   const runCVPace = runCV ? 1609.34 / runCV : null;
 
-  // Run Training Zones
+  // Estimate missing run paces for zone calculation
+  // Use retention factors from benchmarks: 400m pace × retention = longer pace
+  // Retention factors: mile ~0.78-0.84, 5k ~0.68-0.73
+  let estimatedRunPaces = { ...runPacePerMile };
+
+  // If we have 5k pace, we can estimate others
+  if (runPacePerMile['5k']) {
+    if (!runPacePerMile[400]) {
+      // 400m pace ≈ 5k pace × (5k retention / hypothetical 400m retention ~0.90)
+      estimatedRunPaces[400] = runPacePerMile['5k'] * (bm.run.retention['5k'] / 0.90);
+    }
+    if (!runPacePerMile.mile) {
+      // mile pace ≈ 5k pace × (5k retention / mile retention)
+      estimatedRunPaces.mile = runPacePerMile['5k'] * (bm.run.retention['5k'] / bm.run.retention.mile);
+    }
+  }
+  // If we have mile pace
+  else if (runPacePerMile.mile) {
+    if (!runPacePerMile[400]) {
+      // 400m pace ≈ mile pace × (mile retention / 0.90)
+      estimatedRunPaces[400] = runPacePerMile.mile * (bm.run.retention.mile / 0.90);
+    }
+    if (!runPacePerMile['5k']) {
+      // 5k pace ≈ mile pace / (5k retention / mile retention)
+      estimatedRunPaces['5k'] = runPacePerMile.mile * (bm.run.retention.mile / bm.run.retention['5k']);
+    }
+  }
+  // If we only have 400m pace
+  else if (runPacePerMile[400]) {
+    if (!runPacePerMile.mile) {
+      estimatedRunPaces.mile = runPacePerMile[400] / (bm.run.retention.mile / 0.90);
+    }
+    if (!runPacePerMile['5k']) {
+      estimatedRunPaces['5k'] = runPacePerMile[400] / (bm.run.retention['5k'] / 0.90);
+    }
+  }
+
+  // Run Training Zones - use estimated paces if available
   let runZones: Zone[] = [];
-  if (runPacePerMile[400] && runPacePerMile.mile && runPacePerMile['5k']) {
-    const p400 = runPacePerMile[400];
-    const pMile = runPacePerMile.mile;
-    const p5k = runPacePerMile['5k'];
+  if (estimatedRunPaces[400] && estimatedRunPaces.mile && estimatedRunPaces['5k']) {
+    const p400 = estimatedRunPaces[400];
+    const pMile = estimatedRunPaces.mile;
+    const p5k = estimatedRunPaces['5k'];
     
     const z5Low = p5k;
     const z5High = p5k * 1.05;
