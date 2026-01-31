@@ -62,7 +62,7 @@ export default function MovementAssessment({ athlete, existingData }: MovementAs
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
-    
+
     try {
       const res = await fetch('/api/movement', {
         method: 'POST',
@@ -70,6 +70,7 @@ export default function MovementAssessment({ athlete, existingData }: MovementAs
         body: JSON.stringify({
           email: athlete.email,
           movementData,
+          competitionTier: athlete.competitionTier,
         }),
       });
 
@@ -77,10 +78,13 @@ export default function MovementAssessment({ athlete, existingData }: MovementAs
         localStorage.removeItem('movement-assessment-draft');
         setShowSuccess(true);
       } else {
-        alert('Failed to save assessment. Please try again.');
+        const errorData = await res.json().catch(() => ({}));
+        console.error('Movement save failed:', res.status, errorData);
+        alert(`Failed to save assessment (${res.status}): ${errorData.error || 'Unknown error'}. Please try again.`);
       }
     } catch (err) {
-      alert('Failed to save assessment. Please try again.');
+      console.error('Movement save error:', err);
+      alert('Failed to save assessment. Please check your connection and try again.');
     } finally {
       setIsSubmitting(false);
     }
